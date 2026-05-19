@@ -47,6 +47,10 @@ class _TokenGateScreenState extends State<TokenGateScreen> {
             TextField(controller: controller, decoration: const InputDecoration(labelText: '粘贴 GitHub Token', border: OutlineInputBorder())),
             const SizedBox(height: 12),
             const Text('建议权限：repo、workflow、read:user、write:packages、delete_repo。公开/私有仓库、Actions 和 Release 都需要对应权限。'),
+            if (state.tokenStatus != null) ...[
+              const SizedBox(height: 12),
+              Text(state.tokenStatus!, style: TextStyle(color: state.tokenValidated ? Colors.green : Theme.of(context).colorScheme.primary)),
+            ],
             if (state.error != null) ...[
               const SizedBox(height: 12),
               Text(state.error!, style: const TextStyle(color: Colors.red)),
