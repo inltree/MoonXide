@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/services/app_state.dart';
 
 class TokenGateScreen extends StatefulWidget {
@@ -18,6 +19,17 @@ class _TokenGateScreenState extends State<TokenGateScreen> {
     super.dispose();
   }
 
+  Future<void> _openTokenPage() async {
+    final uri = Uri.https('github.com', '/settings/tokens/new', {
+      'description': 'MoonXide',
+      'scopes': 'repo,workflow,read:user,write:packages,delete_repo',
+    });
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('无法打开浏览器，请手动访问 GitHub Token 页面')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
@@ -30,7 +42,7 @@ class _TokenGateScreenState extends State<TokenGateScreen> {
           children: [
             const Text('MoonXide 需要 GitHub Token 才能创建仓库、读写代码、触发编译、下载产物与发布发行版。'),
             const SizedBox(height: 12),
-            FilledButton.icon(onPressed: () {}, icon: const Icon(Icons.open_in_new), label: const Text('前往 GitHub 创建令牌')),
+            FilledButton.icon(onPressed: _openTokenPage, icon: const Icon(Icons.open_in_new), label: const Text('前往 GitHub 创建令牌')),
             const SizedBox(height: 12),
             TextField(controller: controller, decoration: const InputDecoration(labelText: '粘贴 GitHub Token', border: OutlineInputBorder())),
             const SizedBox(height: 12),
