@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import '../models/build_profile.dart';
@@ -13,6 +14,8 @@ class AppState extends ChangeNotifier {
   String? selectedOwner;
   String? selectedRepo;
   bool loading = false;
+  bool tokenValidated = false;
+  String? tokenStatus;
   String? error;
   BuildProfile buildProfile = BuildProfile.debug;
 
@@ -22,23 +25,34 @@ class AppState extends ChangeNotifier {
     token = await tokenStore.readToken();
     if (token == null || token!.isEmpty) return;
     github = GithubService(token: token!);
+    tokenValidated = false;
+    tokenStatus = '已加载本地 Token，正在后台验证 GitHub 连接...';
+    notifyListeners();
+    unawaited(refreshTokenValidation());
+  }
+
+  Future<bool> refreshTokenValidation() async {
+    if (token == null || token!.isEmpty || github == null) return false;
     try {
       final user = await github!.getCurrentUser();
       login = user['login'] as String?;
       selectedOwner = login;
+      tokenValidated = true;
+      tokenStatus = login == null ? 'Token 验证成功' : 'Token 验证成功：$login';
+      error = null;
       notifyListeners();
+      return true;
     } on SocketException catch (e) {
-      if (_isDnsFailure(e)) {
-        notifyListeners();
-        return;
-      }
-      await tokenStore.clearToken();
-      token = null;
-      github = null;
-    } catch (_) {
-      await tokenStore.clearToken();
-      token = null;
-      github = null;
+      tokenValidated = false;
+      tokenStatus = '无法连接 GitHub：${_friendlySocketMessage(e)}';
+      notifyListeners();
+      return false;
+    } catch (e) {
+      tokenValidated = false;
+      tokenStatus = null;
+      error = _formatTokenError(e);
+      notifyListeners();
+      return false;
     }
   }
 
@@ -49,36 +63,36 @@ class AppState extends ChangeNotifier {
       notifyListeners();
       return false;
     }
+
     loading = true;
     error = null;
+    tokenStatus = '正在验证 Token...';
     notifyListeners();
+
     final service = GithubService(token: cleaned);
+    token = cleaned;
+    github = service;
+    await tokenStore.saveToken(cleaned);
+
     try {
       final user = await service.getCurrentUser();
-      token = cleaned;
-      github = service;
       login = user['login'] as String?;
       selectedOwner = login;
-      await tokenStore.saveToken(token!);
+      tokenValidated = true;
+      tokenStatus = login == null ? 'Token 验证成功' : 'Token 验证成功：$login';
       loading = false;
       notifyListeners();
       return true;
     } on SocketException catch (e) {
-      if (_isDnsFailure(e)) {
-        await _acceptOffline(cleaned, service);
-        return true;
-      }
-      error = '网络连接失败：${e.message}';
+      tokenValidated = false;
+      tokenStatus = '已保存 Token，但当前无法连接 GitHub：${_friendlySocketMessage(e)}';
       loading = false;
       notifyListeners();
-      return false;
+      return true;
     } catch (e) {
-      final message = e.toString();
-      if (_isOfflineError(message)) {
-        await _acceptOffline(cleaned, service);
-        return true;
-      }
-      error = 'Token 验证失败：$e';
+      tokenValidated = false;
+      tokenStatus = null;
+      error = _formatTokenError(e);
       loading = false;
       notifyListeners();
       return false;
@@ -90,22 +104,16 @@ class AppState extends ChangeNotifier {
     return e.osError?.errorCode == 7 || message.contains('failed host lookup') || message.contains('主机查找失败') || message.contains('no address associated');
   }
 
-  bool _isOfflineError(String message) {
-    final lower = message.toLowerCase();
-    return lower.contains('socketexception') &&
-        lower.contains('api.github.com') &&
-        (lower.contains('主机查找失败') || lower.contains('failed host lookup') || lower.contains('no address associated') || lower.contains('network is unreachable'));
+  String _friendlySocketMessage(SocketException e) {
+    if (_isDnsFailure(e)) return '无法解析 api.github.com，请检查网络、DNS、代理或系统网络权限';
+    return e.message;
   }
 
-  Future<void> _acceptOffline(String cleaned, GithubService service) async {
-    token = cleaned;
-    github = service;
-    login = null;
-    selectedOwner = null;
-    await tokenStore.saveToken(token!);
-    error = null;
-    loading = false;
-    notifyListeners();
+  String _formatTokenError(Object e) {
+    final message = e.toString();
+    if (message.contains('GitHub API 401')) return 'Token 无效或已过期，请重新生成 Token';
+    if (message.contains('GitHub API 403')) return 'Token 权限不足或请求被 GitHub 拒绝，请确认包含 repo、workflow、read:user 权限';
+    return 'Token 验证失败：$message';
   }
 
   Future<void> logout() async {
@@ -115,6 +123,9 @@ class AppState extends ChangeNotifier {
     login = null;
     selectedOwner = null;
     selectedRepo = null;
+    tokenStatus = null;
+    error = null;
+    tokenValidated = false;
     notifyListeners();
   }
 
