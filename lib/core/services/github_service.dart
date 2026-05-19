@@ -1,0 +1,110 @@
+import 'dart:convert';
+import 'dart:typed_data';
+import 'package:http/http.dart' as http;
+
+class GithubService {
+  final String token;
+  static const _base = 'https://api.github.com';
+
+  GithubService({required this.token});
+
+  Map<String, String> get _headers => {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+      };
+
+  Future<dynamic> _request(String method, String path, {Object? body}) async {
+    final uri = Uri.parse('$_base$path');
+    late http.Response res;
+    final encoded = body == null ? null : jsonEncode(body);
+    final headers = {..._headers, if (body != null) 'Content-Type': 'application/json'};
+    switch (method) {
+      case 'GET':
+        res = await http.get(uri, headers: headers);
+        break;
+      case 'POST':
+        res = await http.post(uri, headers: headers, body: encoded);
+        break;
+      case 'PUT':
+        res = await http.put(uri, headers: headers, body: encoded);
+        break;
+      case 'PATCH':
+        res = await http.patch(uri, headers: headers, body: encoded);
+        break;
+      case 'DELETE':
+        res = await http.delete(uri, headers: headers, body: encoded);
+        break;
+      default:
+        throw UnsupportedError(method);
+    }
+    if (res.statusCode >= 200 && res.statusCode < 300) {
+      if (res.body.isEmpty) return null;
+      return jsonDecode(res.body);
+    }
+    throw Exception('GitHub API ${res.statusCode}: ${res.body}');
+  }
+
+  Future<Map<String, dynamic>> getCurrentUser() async => Map<String, dynamic>.from(await _request('GET', '/user'));
+
+  Future<List<Map<String, dynamic>>> listRepositories() async {
+    final data = await _request('GET', '/user/repos?per_page=100&type=owner&sort=updated');
+    return List<Map<String, dynamic>>.from(data as List);
+  }
+
+  Future<Map<String, dynamic>> createRepository({required String name, required bool private, required bool autoInit, String? description, String? licenseTemplate}) async {
+    return Map<String, dynamic>.from(await _request('POST', '/user/repos', body: {
+      'name': name,
+      'private': private,
+      'auto_init': autoInit,
+      if (description != null && description.isNotEmpty) 'description': description,
+      if (licenseTemplate != null && licenseTemplate.isNotEmpty) 'license_template': licenseTemplate,
+    }));
+  }
+
+  Future<List<Map<String, dynamic>>> getContents(String owner, String repo, {String path = ''}) async {
+    final safePath = path.isEmpty ? '' : '/$path';
+    final data = await _request('GET', '/repos/$owner/$repo/contents$safePath');
+    if (data is List) return List<Map<String, dynamic>>.from(data);
+    return [Map<String, dynamic>.from(data as Map)];
+  }
+
+  Future<Map<String, dynamic>> getFile(String owner, String repo, String path) async => Map<String, dynamic>.from(await _request('GET', '/repos/$owner/$repo/contents/$path'));
+
+  Future<void> putFile({required String owner, required String repo, required String path, required String message, required String contentBase64, String? sha}) async {
+    await _request('PUT', '/repos/$owner/$repo/contents/$path', body: {'message': message, 'content': contentBase64, if (sha != null) 'sha': sha});
+  }
+
+  Future<void> deleteFile({required String owner, required String repo, required String path, required String message, required String sha}) async {
+    await _request('DELETE', '/repos/$owner/$repo/contents/$path', body: {'message': message, 'sha': sha});
+  }
+
+  Future<void> dispatchWorkflow({required String owner, required String repo, required String workflowFile, String ref = 'main', required Map<String, dynamic> inputs}) async {
+    await _request('POST', '/repos/$owner/$repo/actions/workflows/$workflowFile/dispatches', body: {'ref': ref, 'inputs': inputs});
+  }
+
+  Future<List<Map<String, dynamic>>> listWorkflowRuns(String owner, String repo) async {
+    final data = await _request('GET', '/repos/$owner/$repo/actions/runs?per_page=20');
+    return List<Map<String, dynamic>>.from(data['workflow_runs'] as List);
+  }
+
+  Future<List<Map<String, dynamic>>> listArtifacts(String owner, String repo, int runId) async {
+    final data = await _request('GET', '/repos/$owner/$repo/actions/runs/$runId/artifacts');
+    return List<Map<String, dynamic>>.from(data['artifacts'] as List);
+  }
+
+  Future<Uint8List> downloadRunLogs(String owner, String repo, int runId) async {
+    final res = await http.get(Uri.parse('$_base/repos/$owner/$repo/actions/runs/$runId/logs'), headers: _headers);
+    if (res.statusCode >= 200 && res.statusCode < 300) return res.bodyBytes;
+    throw Exception('下载日志失败 ${res.statusCode}: ${res.body}');
+  }
+
+  Future<Map<String, dynamic>> createRelease({required String owner, required String repo, required String tagName, required String name, required String body, bool prerelease = false}) async {
+    return Map<String, dynamic>.from(await _request('POST', '/repos/$owner/$repo/releases', body: {'tag_name': tagName, 'name': name, 'body': body, 'prerelease': prerelease}));
+  }
+
+  Future<List<Map<String, dynamic>>> listReleases(String owner, String repo) async {
+    final data = await _request('GET', '/repos/$owner/$repo/releases?per_page=30');
+    return List<Map<String, dynamic>>.from(data as List);
+  }
+}
