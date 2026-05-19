@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:http/http.dart' as http;
@@ -19,24 +20,28 @@ class GithubService {
     late http.Response res;
     final encoded = body == null ? null : jsonEncode(body);
     final headers = {..._headers, if (body != null) 'Content-Type': 'application/json'};
-    switch (method) {
-      case 'GET':
-        res = await http.get(uri, headers: headers);
-        break;
-      case 'POST':
-        res = await http.post(uri, headers: headers, body: encoded);
-        break;
-      case 'PUT':
-        res = await http.put(uri, headers: headers, body: encoded);
-        break;
-      case 'PATCH':
-        res = await http.patch(uri, headers: headers, body: encoded);
-        break;
-      case 'DELETE':
-        res = await http.delete(uri, headers: headers, body: encoded);
-        break;
-      default:
-        throw UnsupportedError(method);
+    try {
+      switch (method) {
+        case 'GET':
+          res = await http.get(uri, headers: headers).timeout(const Duration(seconds: 15));
+          break;
+        case 'POST':
+          res = await http.post(uri, headers: headers, body: encoded).timeout(const Duration(seconds: 15));
+          break;
+        case 'PUT':
+          res = await http.put(uri, headers: headers, body: encoded).timeout(const Duration(seconds: 15));
+          break;
+        case 'PATCH':
+          res = await http.patch(uri, headers: headers, body: encoded).timeout(const Duration(seconds: 15));
+          break;
+        case 'DELETE':
+          res = await http.delete(uri, headers: headers, body: encoded).timeout(const Duration(seconds: 15));
+          break;
+        default:
+          throw UnsupportedError(method);
+      }
+    } on TimeoutException {
+      throw Exception('GitHub API 请求超时：$uri');
     }
     if (res.statusCode >= 200 && res.statusCode < 300) {
       if (res.body.isEmpty) return null;
