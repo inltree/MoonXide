@@ -38,25 +38,32 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          cache: true
+          cache: false
 
       - name: Generate Android platform
         run: flutter create . --platforms=android --project-name moonxide
 
-      - name: Install system build tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake ninja-build build-essential
-
       - name: Install dependencies
         run: flutter pub get
+
+      - name: Force Android compileSdk
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('android/app/build.gradle')
+          s = p.read_text()
+          s = s.replace('compileSdk = flutter.compileSdkVersion', 'compileSdk = 36')
+          s = s.replace('targetSdk = flutter.targetSdkVersion', 'targetSdk = 36')
+          p.write_text(s)
+          print(p.read_text())
+          PY
 
       - name: Build APK
         run: |
           if [ "${{ github.event.inputs.build_type }}" = "debug" ]; then
-            flutter build apk --debug
+            flutter build apk --debug --no-tree-shake-icons
           else
-            flutter build apk --release
+            flutter build apk --release --no-tree-shake-icons
           fi
 
       - name: Upload artifact
