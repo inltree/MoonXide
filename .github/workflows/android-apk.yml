@@ -51,25 +51,40 @@ jobs:
       - name: Force Android SDK versions
         run: |
           python3 - <<'PY'
+          import re
           from pathlib import Path
-          candidates = [Path('android/app/build.gradle'), Path('android/app/build.gradle.kts')]
-          patched = False
-          for p in candidates:
-              if not p.exists():
+
+          roots = [Path('android'), Path.home() / '.pub-cache' / 'hosted']
+          patterns = [
+              (re.compile(r'compileSdk\s*=\s*flutter\.compileSdkVersion'), 'compileSdk = 36'),
+              (re.compile(r'compileSdkVersion\s+flutter\.compileSdkVersion'), 'compileSdkVersion 36'),
+              (re.compile(r'compileSdk\s+flutter\.compileSdkVersion'), 'compileSdk 36'),
+              (re.compile(r'compileSdk\s*=\s*34'), 'compileSdk = 36'),
+              (re.compile(r'compileSdkVersion\s+34'), 'compileSdkVersion 36'),
+              (re.compile(r'compileSdk\s+34'), 'compileSdk 36'),
+              (re.compile(r'targetSdk\s*=\s*flutter\.targetSdkVersion'), 'targetSdk = 36'),
+              (re.compile(r'targetSdkVersion\s+flutter\.targetSdkVersion'), 'targetSdkVersion 36'),
+              (re.compile(r'targetSdk\s+flutter\.targetSdkVersion'), 'targetSdk 36'),
+          ]
+
+          patched = []
+          for root in roots:
+              if not root.exists():
                   continue
-              s = p.read_text()
-              original = s
-              s = s.replace('compileSdk = flutter.compileSdkVersion', 'compileSdk = 36')
-              s = s.replace('compileSdk flutter.compileSdkVersion', 'compileSdk 36')
-              s = s.replace('targetSdk = flutter.targetSdkVersion', 'targetSdk = 36')
-              s = s.replace('targetSdk flutter.targetSdkVersion', 'targetSdk 36')
-              if s != original:
-                  p.write_text(s)
-                  patched = True
-                  print(f'patched {p}')
-                  print(s)
+              for p in list(root.rglob('*.gradle')) + list(root.rglob('*.gradle.kts')):
+                  s = p.read_text(errors='ignore')
+                  original = s
+                  for rx, repl in patterns:
+                      s = rx.sub(repl, s)
+                  if s != original:
+                      p.write_text(s)
+                      patched.append(str(p))
+
           if not patched:
-              raise SystemExit('No Android app Gradle file was found or patched')
+              raise SystemExit('No Android Gradle files were patched')
+          print('patched Gradle files:')
+          for item in patched:
+              print(' -', item)
           PY
 
       - name: Build APK
