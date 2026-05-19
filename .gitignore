@@ -7,7 +7,7 @@
 .packages
 .pub-cache/
 .pub/
-build/
+/build/
 flutter_*.png
 
 # Android / Gradle
