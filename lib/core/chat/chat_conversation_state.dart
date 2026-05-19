@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../ai/ai_config_state.dart';
+import '../ai/ai_api_mode.dart';
 import 'chat_compressor.dart';
 import 'chat_memory_file_store.dart';
 import 'chat_memory_snapshot.dart';
