@@ -1,4 +1,6 @@
 import 'dart:convert';
+import '../models/project_identity_config.dart';
+import 'project_identity_patch_service.dart';
 
 class ConfigPatchService {
   String addManifestPermissions(String manifest, Iterable<String> permissions) {
@@ -19,6 +21,22 @@ class ConfigPatchService {
     if (depIndex < 0) return 'dependencies:\n$lines\n\n$pubspec';
     final insert = pubspec.indexOf('\n', depIndex) + 1;
     return '${pubspec.substring(0, insert)}$lines\n${pubspec.substring(insert)}';
+  }
+
+  String applyProjectIdentityToPubspec(String pubspec, ProjectIdentityConfig config) {
+    return ProjectIdentityPatchService().patchPubspec(pubspec, config);
+  }
+
+  String applyProjectIdentityToAndroidManifest(String manifest, ProjectIdentityConfig config) {
+    return ProjectIdentityPatchService().patchAndroidManifest(manifest, config);
+  }
+
+  String applyProjectIdentityToBuildGradle(String buildGradle, ProjectIdentityConfig config) {
+    return ProjectIdentityPatchService().patchBuildGradle(buildGradle, config);
+  }
+
+  String? validateProjectIdentity(ProjectIdentityConfig config) {
+    return ProjectIdentityPatchService().validate(config);
   }
 
   String encodeContent(String content) => base64Encode(utf8.encode(content));

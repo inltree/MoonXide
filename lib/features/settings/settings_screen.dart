@@ -4,6 +4,7 @@ import '../../core/services/signing_store.dart';
 import '../../core/catalogs/permission_catalog.dart';
 import '../../core/catalogs/dependency_catalog.dart';
 import '../ai_settings/ai_settings_screen.dart';
+import '../project_identity/project_identity_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   final AppState state;
@@ -35,6 +36,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
               subtitle: const Text('兼容 OpenAI Chat Completions、OpenAI Responses、Anthropic Messages。'),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AiSettingsScreen())),
+            ),
+          ),
+          const SizedBox(height: 24),
+          const Text('项目身份配置', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          Card(
+            child: ListTile(
+              title: const Text('软件图标、名称、包名、版本'),
+              subtitle: const Text('用于用户项目的应用身份与发行版本配置。'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ProjectIdentityScreen())),
             ),
           ),
           const SizedBox(height: 24),
