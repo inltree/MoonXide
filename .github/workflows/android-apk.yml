@@ -44,7 +44,9 @@ jobs:
         run: flutter create . --platforms=android --project-name moonxide
 
       - name: Install dependencies
-        run: flutter pub get
+        run: |
+          rm -f pubspec.lock
+          flutter pub get
 
       - name: Force Android SDK versions
         run: |
