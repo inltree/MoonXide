@@ -33,6 +33,9 @@ class _TokenGateScreenState extends State<TokenGateScreen> {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
+    if (state.token != null && state.token!.isNotEmpty && controller.text.isEmpty) {
+      controller.text = state.token!;
+    }
     return Scaffold(
       appBar: AppBar(title: const Text('GitHub 接入')),
       body: Padding(
@@ -40,7 +43,7 @@ class _TokenGateScreenState extends State<TokenGateScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text('MoonXide 需要 GitHub Token 才能创建仓库、读写代码、触发编译、下载产物与发布发行版。'),
+            const Text('MoonXide 需要先验证 GitHub Token，验证成功后才能创建仓库、读写代码、触发编译、下载产物与发布发行版。'),
             const SizedBox(height: 12),
             FilledButton.icon(onPressed: _openTokenPage, icon: const Icon(Icons.open_in_new), label: const Text('前往 GitHub 创建令牌')),
             const SizedBox(height: 12),
