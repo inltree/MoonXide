@@ -88,7 +88,7 @@ class AppState extends ChangeNotifier {
       tokenStatus = '已保存 Token，但当前无法连接 GitHub：${_friendlySocketMessage(e)}';
       loading = false;
       notifyListeners();
-      return true;
+      return false;
     } catch (e) {
       tokenValidated = false;
       tokenStatus = null;
