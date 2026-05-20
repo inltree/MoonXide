@@ -63,7 +63,7 @@ class MoonXideTheme {
       colorScheme: scheme,
       useMaterial3: true,
       visualDensity: VisualDensity.standard,
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         elevation: 0,
         color: scheme.surface.withOpacity(0.78),
         surfaceTintColor: Colors.transparent,
