@@ -21,7 +21,7 @@ class MoonXideApp extends StatelessWidget {
         '/token': (_) => const TokenGateScreen(),
         '/home': (_) => const HomeScreen(),
       },
-      home: state.token == null || state.token!.isEmpty ? const TokenGateScreen() : const HomeScreen(),
+      home: state.tokenValidated ? const HomeScreen() : const TokenGateScreen(),
     );
   }
 }
