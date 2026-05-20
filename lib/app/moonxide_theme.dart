@@ -88,17 +88,17 @@ class MoonXideTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: scheme.surface.withOpacity(0.72),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide.none),
+        fillColor: scheme.surface.withOpacity(0.68),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(18),
-          borderSide: BorderSide(color: scheme.primary.withOpacity(0.14)),
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: scheme.primary.withOpacity(0.18)),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(18),
-          borderSide: BorderSide(color: scheme.primary.withOpacity(0.58), width: 1.4),
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: scheme.primary.withOpacity(0.60), width: 1.5),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       ),
       listTileTheme: ListTileThemeData(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
