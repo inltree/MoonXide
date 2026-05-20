@@ -106,7 +106,7 @@ class EditorScreenState extends State<EditorScreen> {
     final editorBg    = isDark ? const Color(0xFF0A1929) : const Color(0xFFFAFDFF);
     final editorText  = isDark ? const Color(0xFFD4E8F5) : const Color(0xFF1A2B38);
     contentController.baseStyle = TextStyle(
-        fontFamily: 'monospace', fontSize: 14, height: 1.55, color: editorText);
+        fontFamily: 'monospace', fontSize: 13, height: 1.55, color: editorText);
     contentController.keywordColor = isDark ? const Color(0xFF82AAFF) : const Color(0xFF245BCB);
     contentController.stringColor = isDark ? const Color(0xFFC3E88D) : const Color(0xFF22863A);
     contentController.commentColor = isDark ? const Color(0xFF637777) : const Color(0xFF6A737D);
@@ -149,7 +149,7 @@ class EditorScreenState extends State<EditorScreen> {
             children: [
               // 行号栏
               Container(
-                width: 34,
+                width: 36,
                 color: gutterBg,
                 child: ListView.builder(
                   padding: EdgeInsets.zero,
@@ -163,7 +163,8 @@ class EditorScreenState extends State<EditorScreen> {
                         child: Text('${i + 1}',
                             style: TextStyle(
                                 fontFamily: 'monospace',
-                                fontSize: 12,
+                                fontSize: 13,
+                                height: 1.55,
                                 color: gutterText)),
                       ),
                     ),

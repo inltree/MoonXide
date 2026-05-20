@@ -415,12 +415,11 @@ class MxIconBtn extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bg = active
+        ? scheme.primary.withOpacity(0.14)
+        : Colors.transparent;
     final w = Material(
-      color: active
-          ? scheme.primary.withOpacity(0.16)
-          : (isDark ? const Color(0xFF0F2230) : Colors.white)
-              .withOpacity(isDark ? 0.72 : 0.82),
+      color: bg,
       borderRadius: BorderRadius.circular(11),
       child: InkWell(
         borderRadius: BorderRadius.circular(11),
@@ -433,7 +432,7 @@ class MxIconBtn extends StatelessWidget {
             size: size * 0.48,
             color: active
                 ? scheme.primary
-                : scheme.onSurface.withOpacity(0.68),
+                : scheme.onSurface.withOpacity(0.56),
           ),
         ),
       ),
