@@ -112,4 +112,16 @@ class GithubService {
     final data = await _request('GET', '/repos/$owner/$repo/releases?per_page=30');
     return List<Map<String, dynamic>>.from(data as List);
   }
+
+  /// 删除仓库（不可逆）
+  Future<void> deleteRepository(String owner, String repo) async {
+    await _request('DELETE', '/repos/$owner/$repo');
+  }
+
+  /// 重命名仓库
+  Future<Map<String, dynamic>> renameRepository(
+      String owner, String repo, String newName) async {
+    return Map<String, dynamic>.from(
+        await _request('PATCH', '/repos/$owner/$repo', body: {'name': newName}));
+  }
 }

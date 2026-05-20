@@ -135,6 +135,12 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  void clearRepositorySelection() {
+    selectedOwner = null;
+    selectedRepo = null;
+    notifyListeners();
+  }
+
   void setBuildProfile(BuildProfile value) {
     buildProfile = value;
     notifyListeners();
