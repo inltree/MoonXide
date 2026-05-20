@@ -15,20 +15,23 @@ class BuildScreen extends StatelessWidget {
   Future<void> _trigger(BuildContext context) async {
     final build = context.read<BuildCenterState>();
     final owner = state.selectedOwner;
-    final repo = state.selectedRepo;
+    final repo  = state.selectedRepo;
     if (owner == null || repo == null || state.github == null) {
       build.setStatus('请先选择仓库');
       return;
     }
+    build.setStatus('正在触发 GitHub Actions…');
     try {
-      build.setStatus('正在触发 GitHub Actions...');
       await state.github!.dispatchWorkflow(
-        owner: owner,
-        repo: repo,
+        owner: owner, repo: repo,
         workflowFile: 'android-apk.yml',
-        inputs: {'build_type': state.buildProfile == BuildProfile.debug ? 'debug' : 'release', 'publish_release': 'false', 'release_tag': 'latest'},
+        inputs: {
+          'build_type':       state.buildProfile == BuildProfile.debug ? 'debug' : 'release',
+          'publish_release':  'false',
+          'release_tag':      'latest',
+        },
       );
-      build.setStatus('已触发构建，等待 GitHub Actions 响应...');
+      build.setStatus('已触发构建，等待 GitHub Actions 响应…');
     } catch (e) {
       build.setStatus('触发失败：$e');
     }
@@ -37,24 +40,26 @@ class BuildScreen extends StatelessWidget {
   Future<void> _poll(BuildContext context) async {
     final build = context.read<BuildCenterState>();
     final owner = state.selectedOwner;
-    final repo = state.selectedRepo;
+    final repo  = state.selectedRepo;
     if (owner == null || repo == null || state.github == null) return;
+    build.setStatus('正在读取最新构建…');
     try {
-      build.setStatus('正在读取最新构建...');
       final runs = await state.github!.listWorkflowRuns(owner, repo);
       if (runs.isEmpty) { build.setStatus('没有构建记录'); return; }
-      final run = runs.first;
-      final status = run['status'];
+      final run        = runs.first;
+      final status     = run['status'];
       final conclusion = run['conclusion'];
-      final htmlUrl = run['html_url'];
-      build.setStatus('状态：$status / 结果：${conclusion ?? '运行中'}\n$htmlUrl');
+      final htmlUrl    = run['html_url'];
+      build.setStatus('状态：$status\n结果：${conclusion ?? '运行中'}\n$htmlUrl');
       if (status == 'completed' && conclusion == 'success') {
         final artifacts = await state.github!.listArtifacts(owner, repo, run['id'] as int);
-        if (artifacts.isNotEmpty) build.setArtifact(downloadUrl: artifacts.first['archive_download_url'] as String?);
+        if (artifacts.isNotEmpty) {
+          build.setArtifact(downloadUrl: artifacts.first['archive_download_url'] as String?);
+        }
         build.setLog(null);
       }
       if (status == 'completed' && conclusion != 'success') {
-        final bytes = await state.github!.downloadRunLogs(owner, repo, run['id'] as int);
+        final bytes   = await state.github!.downloadRunLogs(owner, repo, run['id'] as int);
         final summary = LogParser().summarize(String.fromCharCodes(bytes));
         build.setLog(summary);
       }
@@ -67,11 +72,16 @@ class BuildScreen extends StatelessWidget {
     final build = context.read<BuildCenterState>();
     if (build.artifactDownloadUrl == null || state.token == null) return;
     try {
-      final path = await ArtifactDownloader().download(url: build.artifactDownloadUrl!, token: state.token!, fileName: 'moonxide-artifact.zip');
+      final path = await ArtifactDownloader().download(
+        url: build.artifactDownloadUrl!, token: state.token!, fileName: 'moonxide-artifact.zip');
       build.setArtifact(localPath: path, downloadUrl: build.artifactDownloadUrl);
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已下载到 $path')));
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已下载到 $path')));
+      }
     } catch (e) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('下载失败：$e')));
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('下载失败：$e')));
+      }
     }
   }
 
@@ -81,80 +91,132 @@ class BuildScreen extends StatelessWidget {
     try {
       await AndroidInstaller().openApk(build.artifactLocalPath!);
     } catch (e) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('安装失败：$e')));
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('安装失败：$e')));
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final build = context.watch<BuildCenterState>();
+    final build  = context.watch<BuildCenterState>();
     final scheme = Theme.of(context).colorScheme;
-    return MxPage(
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
-        children: [
-          const MxSectionLabel('构建类型'),
-          MxCard(
-            child: SegmentedButton<BuildProfile>(
-              segments: const [
-                ButtonSegment(value: BuildProfile.debug, icon: Icon(Icons.bug_report_rounded), label: Text('Debug')),
-                ButtonSegment(value: BuildProfile.release, icon: Icon(Icons.rocket_launch_rounded), label: Text('Release')),
-              ],
-              selected: {state.buildProfile},
-              onSelectionChanged: (value) => state.setBuildProfile(value.first),
-            ),
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
+      children: [
+        const MxSectionLabel('构建类型'),
+        MxCard(
+          child: Row(
+            children: [
+              _ProfileChip(
+                label: 'Debug',
+                icon: Icons.bug_report_rounded,
+                active: state.buildProfile == BuildProfile.debug,
+                onTap: () => state.setBuildProfile(BuildProfile.debug),
+              ),
+              const SizedBox(width: 10),
+              _ProfileChip(
+                label: 'Release',
+                icon: Icons.rocket_launch_rounded,
+                active: state.buildProfile == BuildProfile.release,
+                onTap: () => state.setBuildProfile(BuildProfile.release),
+              ),
+            ],
           ),
-          const MxSectionLabel('操作'),
-          MxActionRow(children: [
-            Expanded(child: FilledButton.icon(onPressed: () => _trigger(context), icon: const Icon(Icons.play_arrow_rounded), label: const Text('触发编译'))),
-            Expanded(child: OutlinedButton.icon(onPressed: () => _poll(context), icon: const Icon(Icons.refresh_rounded), label: const Text('刷新状态'))),
-          ]),
-          const MxSectionLabel('构建状态'),
+        ),
+        const MxSectionLabel('操作'),
+        MxActionRow(children: [
+          MxButton(label: '触发编译', icon: Icons.play_arrow_rounded, onPressed: () => _trigger(context)),
+          MxButton(label: '刷新状态', icon: Icons.refresh_rounded,   onPressed: () => _poll(context),   filled: false),
+        ]),
+        const MxSectionLabel('构建状态'),
+        MxCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Icon(Icons.terminal_rounded, size: 16, color: scheme.primary),
+                const SizedBox(width: 8),
+                const Text('GitHub Actions', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+              ]),
+              const SizedBox(height: 10),
+              SelectableText(build.status,
+                  style: const TextStyle(fontFamily: 'monospace', fontSize: 12)),
+            ],
+          ),
+        ),
+        if (build.artifactDownloadUrl != null) ...[
+          const MxSectionLabel('产物'),
           MxCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(children: [
-                  Icon(Icons.terminal_rounded, size: 18, color: scheme.primary),
+                  Icon(Icons.android_rounded, color: scheme.primary),
                   const SizedBox(width: 8),
-                  const Text('GitHub Actions', style: TextStyle(fontWeight: FontWeight.w800)),
+                  const Text('APK 产物', style: TextStyle(fontWeight: FontWeight.w800)),
+                  const Spacer(),
+                  MxBadge('可下载', color: Colors.green),
                 ]),
-                const SizedBox(height: 10),
-                SelectableText(build.status, style: const TextStyle(fontFamily: 'monospace', fontSize: 13)),
+                const SizedBox(height: 8),
+                Text(
+                  build.artifactLocalPath ?? build.artifactDownloadUrl!,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12, color: scheme.onSurface.withOpacity(0.5)),
+                ),
+                const SizedBox(height: 12),
+                MxActionRow(children: [
+                  MxButton(label: '下载', icon: Icons.download_rounded,       onPressed: () => _download(context), filled: false),
+                  MxButton(label: '安装', icon: Icons.install_mobile_rounded, onPressed: build.artifactLocalPath == null ? null : () => _install(context)),
+                ]),
               ],
             ),
           ),
-          if (build.artifactDownloadUrl != null) ...[
-            const MxSectionLabel('产物'),
-            MxCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(children: [
-                    Icon(Icons.android_rounded, color: scheme.primary),
-                    const SizedBox(width: 8),
-                    const Text('APK 产物', style: TextStyle(fontWeight: FontWeight.w800)),
-                    const Spacer(),
-                    MxBadge('可下载', color: Colors.green),
-                  ]),
-                  const SizedBox(height: 8),
-                  Text(build.artifactLocalPath ?? build.artifactDownloadUrl!, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: scheme.onSurface.withOpacity(0.55))),
-                  const SizedBox(height: 12),
-                  MxActionRow(children: [
-                    Expanded(child: OutlinedButton.icon(onPressed: () => _download(context), icon: const Icon(Icons.download_rounded), label: const Text('下载'))),
-                    Expanded(child: FilledButton.icon(onPressed: build.artifactLocalPath == null ? null : () => _install(context), icon: const Icon(Icons.install_mobile_rounded), label: const Text('安装'))),
-                  ]),
-                ],
-              ),
-            ),
-          ],
-          if (build.logText != null) ...[
-            const MxSectionLabel('错误日志'),
-            MxCard(
-              child: SelectableText(build.logText!, style: const TextStyle(fontFamily: 'monospace', fontSize: 12)),
-            ),
-          ],
         ],
+        if (build.logText != null) ...[
+          const MxSectionLabel('错误日志'),
+          MxCard(
+            child: SelectableText(build.logText!,
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 11)),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _ProfileChip extends StatelessWidget {
+  const _ProfileChip({required this.label, required this.icon, required this.active, required this.onTap});
+  final String   label;
+  final IconData icon;
+  final bool     active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: active ? scheme.primary.withOpacity(0.14) : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: active ? scheme.primary.withOpacity(0.45) : scheme.outlineVariant.withOpacity(0.3)),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 16, color: active ? scheme.primary : scheme.onSurface.withOpacity(0.5)),
+              const SizedBox(width: 6),
+              Text(label, style: TextStyle(fontWeight: FontWeight.w800, color: active ? scheme.primary : scheme.onSurface.withOpacity(0.6))),
+            ],
+          ),
+        ),
       ),
     );
   }

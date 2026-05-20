@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../app/mx_widgets.dart';
 import '../../core/services/app_state.dart';
 import '../../core/services/editor_state.dart';
 
@@ -77,138 +79,161 @@ class _EditorScreenState extends State<EditorScreen> {
   Widget build(BuildContext context) {
     final editor = context.watch<EditorState>();
     final app = context.watch<AppState>();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     _sync(editor);
     final lineCount = contentController.text.isEmpty ? 1 : contentController.text.split('\n').length;
+
+    // 编辑器颜色
+    final gutterBg = isDark ? const Color(0xFF0D1F2D) : const Color(0xFFEFF4F8);
+    final gutterText = isDark ? const Color(0xFF4A6A80) : const Color(0xFF8A9BAA);
+    final editorBg = isDark ? const Color(0xFF0A1929) : const Color(0xFFFAFDFF);
+    final editorText = isDark ? const Color(0xFFD4E8F5) : const Color(0xFF1A2B38);
+    final dividerColor = isDark ? const Color(0xFF1A3448) : const Color(0xFFD8E8F0);
+
     return Scaffold(
-      appBar: AppBar(
-        toolbarHeight: 50,
-        titleSpacing: 0,
-        title: Text(editor.currentPath.isEmpty ? '没有文件' : editor.currentPath, maxLines: 1, overflow: TextOverflow.ellipsis),
-        actions: [
-          IconButton(tooltip: '撤销', onPressed: () {}, icon: const Icon(Icons.undo_rounded)),
-          IconButton(tooltip: '重做', onPressed: () {}, icon: const Icon(Icons.redo_rounded)),
-          IconButton(tooltip: '保存', onPressed: () => _save(context, editor, app), icon: const Icon(Icons.save_rounded)),
-          IconButton(tooltip: '查找替换', onPressed: () => setState(() => showFind = !showFind), icon: const Icon(Icons.search_rounded)),
-          IconButton(tooltip: '运行/编译', onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请到编译页执行云编译'))), icon: const Icon(Icons.play_arrow_rounded)),
-          PopupMenuButton<String>(
-            onSelected: (value) {
-              if (value == 'format') ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('格式化将接入项目工具链')));
-            },
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'format', child: Text('格式化代码')),
-              PopupMenuItem(value: 'readonly', child: Text('只读/编辑模式')),
-            ],
-          ),
-        ],
-      ),
+      backgroundColor: Colors.transparent,
       body: Column(
         children: [
-          if (showFind)
-            Container(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.45),
-              padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
-              child: Row(
-                children: [
-                  Expanded(child: TextField(controller: searchController, decoration: const InputDecoration(isDense: true, hintText: '搜索'))),
-                  const SizedBox(width: 8),
-                  Expanded(child: TextField(controller: replaceController, decoration: const InputDecoration(isDense: true, hintText: '替换为'))),
-                  IconButton(onPressed: () => _replace(editor), icon: const Icon(Icons.find_replace_rounded)),
-                ],
+          // ── 编辑器工具栏（浮在顶部，留出顶部 toolbar 空间） ──────────────
+          SizedBox(
+            height: MediaQuery.of(context).padding.top + 56,
+            child: Align(
+              alignment: Alignment.bottomLeft,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(0, 0, 0, 6),
+                child: Row(
+                  children: [
+                    // 留出左侧 menu 按钮宽度
+                    const SizedBox(width: 56),
+                    // 查找替换切换
+                    MxIconBtn(icon: Icons.search_rounded, onPressed: () => setState(() => showFind = !showFind), tooltip: '查找替换', active: showFind, size: 36),
+                    const SizedBox(width: 4),
+                    MxIconBtn(icon: Icons.undo_rounded, onPressed: () {}, tooltip: '撤销', size: 36),
+                    const SizedBox(width: 4),
+                    MxIconBtn(icon: Icons.redo_rounded, onPressed: () {}, tooltip: '重做', size: 36),
+                    const SizedBox(width: 4),
+                    MxIconBtn(icon: Icons.save_rounded, onPressed: () => _save(context, editor, app), tooltip: '保存', size: 36),
+                  ],
+                ),
               ),
             ),
-          Expanded(
-            child: editor.currentPath.isEmpty
-                ? const _EmptyEditor()
-                : Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
+          ),
+
+          // ── 查找替换栏 ────────────────────────────────────────────────────
+          if (showFind)
+            ClipRect(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+                child: Container(
+                  color: (isDark ? const Color(0xFF0F2230) : Colors.white).withOpacity(0.72),
+                  padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+                  child: Row(
                     children: [
-                      Container(
-                        width: 54,
-                        color: const Color(0xFFEDEEEF),
-                        child: ListView.builder(
-                          itemCount: lineCount,
-                          itemBuilder: (_, i) => Container(
-                            height: 22,
-                            alignment: Alignment.centerRight,
-                            padding: const EdgeInsets.only(right: 8),
-                            color: i == 0 ? const Color(0xFFE1E1E1) : null,
-                            child: Text('${i + 1}', style: const TextStyle(fontFamily: 'monospace', fontSize: 12, color: Color(0xFF555555))),
-                          ),
-                        ),
-                      ),
-                      Container(width: 1, color: const Color(0xFFE1DDE8)),
-                      Expanded(
-                        child: TextField(
-                          controller: contentController,
-                          expands: true,
-                          maxLines: null,
-                          minLines: null,
-                          keyboardType: TextInputType.multiline,
-                          textAlignVertical: TextAlignVertical.top,
-                          style: const TextStyle(fontFamily: 'monospace', fontSize: 14, height: 1.55, color: Color(0xFF202124)),
-                          decoration: const InputDecoration(
-                            filled: true,
-                            fillColor: Color(0xFFFFFBFF),
-                            border: InputBorder.none,
-                            contentPadding: EdgeInsets.fromLTRB(0, 2, 12, 12),
-                          ),
-                          onChanged: editor.updateContent,
-                        ),
-                      ),
+                      Expanded(child: MxTextField(controller: searchController, hint: '搜索')),
+                      const SizedBox(width: 8),
+                      Expanded(child: MxTextField(controller: replaceController, hint: '替换为')),
+                      const SizedBox(width: 6),
+                      MxIconBtn(icon: Icons.find_replace_rounded, onPressed: () => _replace(editor), size: 36),
                     ],
                   ),
-          ),
-          _SymbolBar(onInsert: (text) => _insert(text, editor)),
-        ],
-      ),
-    );
-  }
-}
+                ),
+              ),
+            ),
 
-class _EmptyEditor extends StatelessWidget {
-  const _EmptyEditor();
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(width: 54, color: const Color(0xFFEDEEEF), alignment: Alignment.topRight, padding: const EdgeInsets.only(top: 4, right: 8), child: const Text('1')),
-        Container(width: 1, color: const Color(0xFFE1DDE8)),
-        const Expanded(
-          child: ColoredBox(
-            color: Color(0xFFFFFBFF),
-            child: Padding(
-              padding: EdgeInsets.only(top: 3),
-              child: Text('打开工作区选择文件，或在此直接编辑。', style: TextStyle(fontFamily: 'monospace', fontSize: 14)),
+          // ── 代码编辑区 ────────────────────────────────────────────────────
+          Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // 行号栏
+                Container(
+                  width: 52,
+                  color: gutterBg,
+                  child: ListView.builder(
+                    padding: EdgeInsets.zero,
+                    itemCount: lineCount,
+                    itemBuilder: (_, i) => SizedBox(
+                      height: 21.7,
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: Text('${i + 1}', style: TextStyle(fontFamily: 'monospace', fontSize: 12, color: gutterText)),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                // 分割线
+                Container(width: 1, color: dividerColor),
+                // 代码区
+                Expanded(
+                  child: TextField(
+                    controller: contentController,
+                    expands: true,
+                    maxLines: null,
+                    minLines: null,
+                    keyboardType: TextInputType.multiline,
+                    textAlignVertical: TextAlignVertical.top,
+                    style: TextStyle(fontFamily: 'monospace', fontSize: 14, height: 1.55, color: editorText),
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: editorBg,
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsets.fromLTRB(10, 2, 12, 12),
+                      hintText: editor.currentPath.isEmpty ? '打开工作区选择文件' : null,
+                      hintStyle: TextStyle(color: editorText.withOpacity(0.3), fontFamily: 'monospace'),
+                    ),
+                    onChanged: editor.updateContent,
+                  ),
+                ),
+              ],
             ),
           ),
-        ),
-      ],
+
+          // ── 符号快捷栏 ────────────────────────────────────────────────────
+          _SymbolBar(isDark: isDark, onInsert: (text) => _insert(text, editor)),
+        ],
+      ),
     );
   }
 }
 
 class _SymbolBar extends StatelessWidget {
-  const _SymbolBar({required this.onInsert});
+  const _SymbolBar({required this.isDark, required this.onInsert});
+  final bool isDark;
   final ValueChanged<String> onInsert;
 
   @override
   Widget build(BuildContext context) {
-    const symbols = ['{', '}', '(', ')', '[', ']', ';', ':', '.', ',', '=>', '==', '!=', '&&', '||', '/', '_', '"', "'"];
+    const symbols = ['{', '}', '(', ')', '[', ']', ';', ':', '.', ',', '=>', '==', '!=', '&&', '||', '/', '_', '"', "'", '\t'];
+    final bg = isDark ? const Color(0xFF0D1F2D) : const Color(0xFFEFF4F8);
+    final fg = isDark ? const Color(0xFF8ECFEE) : const Color(0xFF2F6A8C);
     return SafeArea(
       top: false,
       child: Container(
-        height: 46,
-        color: const Color(0xFFF1F3F4),
+        height: 44,
+        color: bg,
         child: ListView.separated(
           scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          itemBuilder: (_, i) => TextButton(
-            onPressed: () => onInsert(symbols[i]),
-            child: Text(symbols[i], style: const TextStyle(fontSize: 18, color: Color(0xFF202124))),
-          ),
-          separatorBuilder: (_, __) => const SizedBox(width: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
           itemCount: symbols.length,
+          separatorBuilder: (_, __) => const SizedBox(width: 2),
+          itemBuilder: (_, i) {
+            final s = symbols[i];
+            return InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: () => onInsert(s),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(
+                  color: fg.withOpacity(0.10),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(s == '\t' ? '⇥' : s, style: TextStyle(fontFamily: 'monospace', fontSize: 16, fontWeight: FontWeight.w700, color: fg)),
+              ),
+            );
+          },
         ),
       ),
     );

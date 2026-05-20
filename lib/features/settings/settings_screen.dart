@@ -16,142 +16,207 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  final Set<String> selectedPermissions = {};
-  final Set<String> selectedDependencies = {};
-  final signingStore = SigningStore();
+  final Set<String> _perms = {};
+  final Set<String> _deps  = {};
+  final _signingStore = SigningStore();
 
   @override
   Widget build(BuildContext context) {
-    return MxPage(
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
-        children: [
-          const MxSectionLabel('账号'),
-          MxCard(
-            onTap: () => widget.state.logout(),
-            child: Row(
-              children: [
-                const Icon(Icons.logout_rounded),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('退出登录', style: TextStyle(fontWeight: FontWeight.w800)),
-                      Text(widget.state.login == null ? 'GitHub 未登录' : '@${widget.state.login}', style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.55))),
-                    ],
-                  ),
-                ),
-                const Icon(Icons.chevron_right_rounded),
-              ],
-            ),
-          ),
-          const MxSectionLabel('AI 接口'),
-          MxCard(
-            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AiSettingsScreen())),
-            child: Row(
-              children: [
-                const Icon(Icons.auto_awesome_rounded),
-                const SizedBox(width: 12),
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('模型接口配置', style: TextStyle(fontWeight: FontWeight.w800)),
-                      Text('OpenAI / Anthropic / 自定义端点', style: TextStyle(fontSize: 13)),
-                    ],
-                  ),
-                ),
-                const Icon(Icons.chevron_right_rounded),
-              ],
-            ),
-          ),
-          const MxSectionLabel('项目身份'),
-          MxCard(
-            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ProjectIdentityScreen())),
-            child: const Row(
-              children: [
-                Icon(Icons.badge_rounded),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('应用名称、包名、版本、图标', style: TextStyle(fontWeight: FontWeight.w800)),
-                      Text('用于用户项目的发行版本配置', style: TextStyle(fontSize: 13)),
-                    ],
-                  ),
-                ),
-                Icon(Icons.chevron_right_rounded),
-              ],
-            ),
-          ),
-          const MxSectionLabel('签名'),
-          MxCard(
-            onTap: () async {
-              await signingStore.save(keystore: '/sdcard/Download/moonxide.jks', alias: 'moonxide', storePassword: '******', keyPassword: '******');
-              if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('签名配置已保存')));
-            },
-            child: const Row(
-              children: [
-                Icon(Icons.security_rounded),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Keystore 签名配置', style: TextStyle(fontWeight: FontWeight.w800)),
-                      Text('Release 包签名必备', style: TextStyle(fontSize: 13)),
-                    ],
-                  ),
-                ),
-                Icon(Icons.chevron_right_rounded),
-              ],
-            ),
-          ),
-          const MxSectionLabel('Android 权限'),
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
+    final scheme = Theme.of(context).colorScheme;
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
+      children: [
+        // ── 账号 ──────────────────────────────────────────────────────────
+        const MxSectionLabel('账号'),
+        MxCard(
+          onTap: () => widget.state.logout(),
+          child: Row(
             children: [
-              ActionChip(label: const Text('全选'), onPressed: () => setState(() => selectedPermissions.addAll(PermissionCatalog.android.map((e) => e.name)))),
-              ActionChip(label: const Text('清空'), onPressed: () => setState(() => selectedPermissions.clear())),
+              Icon(Icons.logout_rounded, color: scheme.error, size: 20),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('退出登录', style: TextStyle(fontWeight: FontWeight.w800)),
+                    Text(
+                      widget.state.login == null ? 'GitHub 未登录' : '@${widget.state.login}',
+                      style: TextStyle(fontSize: 12, color: scheme.onSurface.withOpacity(0.5)),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded, color: scheme.onSurface.withOpacity(0.3)),
             ],
           ),
-          const SizedBox(height: 8),
-          ...PermissionCatalog.android.map((item) => MxCard(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                child: CheckboxListTile(
-                  value: selectedPermissions.contains(item.name),
-                  onChanged: (v) => setState(() => v == true ? selectedPermissions.add(item.name) : selectedPermissions.remove(item.name)),
-                  title: Text(item.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-                  subtitle: Text(item.description, style: const TextStyle(fontSize: 12)),
-                  contentPadding: EdgeInsets.zero,
-                  dense: true,
-                ),
-              )),
-          const MxSectionLabel('Flutter 依赖'),
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
+        ),
+
+        // ── AI 接口 ───────────────────────────────────────────────────────
+        const MxSectionLabel('AI 接口'),
+        MxCard(
+          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AiSettingsScreen())),
+          child: Row(
             children: [
-              ActionChip(label: const Text('全选'), onPressed: () => setState(() => selectedDependencies.addAll(DependencyCatalog.flutter.map((e) => e.packageName)))),
-              ActionChip(label: const Text('清空'), onPressed: () => setState(() => selectedDependencies.clear())),
+              Icon(Icons.auto_awesome_rounded, color: scheme.primary, size: 20),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('模型接口配置', style: TextStyle(fontWeight: FontWeight.w800)),
+                    Text('OpenAI / Anthropic / 自定义端点', style: TextStyle(fontSize: 12)),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded, color: scheme.onSurface.withOpacity(0.3)),
             ],
           ),
-          const SizedBox(height: 8),
-          ...DependencyCatalog.flutter.map((item) => MxCard(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                child: CheckboxListTile(
-                  value: selectedDependencies.contains(item.packageName),
-                  onChanged: (v) => setState(() => v == true ? selectedDependencies.add(item.packageName) : selectedDependencies.remove(item.packageName)),
-                  title: Text(item.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-                  subtitle: Text('${item.packageName}  ·  ${item.description}', style: const TextStyle(fontSize: 12)),
-                  contentPadding: EdgeInsets.zero,
-                  dense: true,
+        ),
+
+        // ── 项目身份 ──────────────────────────────────────────────────────
+        const MxSectionLabel('项目身份'),
+        MxCard(
+          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ProjectIdentityScreen())),
+          child: Row(
+            children: [
+              Icon(Icons.badge_rounded, color: scheme.primary, size: 20),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('应用名称、包名、版本、图标', style: TextStyle(fontWeight: FontWeight.w800)),
+                    Text('用于用户项目的发行版本配置', style: TextStyle(fontSize: 12)),
+                  ],
                 ),
-              )),
-        ],
+              ),
+              Icon(Icons.chevron_right_rounded, color: scheme.onSurface.withOpacity(0.3)),
+            ],
+          ),
+        ),
+
+        // ── 签名 ──────────────────────────────────────────────────────────
+        const MxSectionLabel('签名'),
+        MxCard(
+          onTap: () async {
+            await _signingStore.save(
+              keystore: '/sdcard/Download/moonxide.jks',
+              alias: 'moonxide',
+              storePassword: '******',
+              keyPassword: '******',
+            );
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('签名配置已保存')));
+            }
+          },
+          child: Row(
+            children: [
+              Icon(Icons.security_rounded, color: scheme.primary, size: 20),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Keystore 签名配置', style: TextStyle(fontWeight: FontWeight.w800)),
+                    Text('Release 包签名必备', style: TextStyle(fontSize: 12)),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded, color: scheme.onSurface.withOpacity(0.3)),
+            ],
+          ),
+        ),
+
+        // ── Android 权限 ──────────────────────────────────────────────────
+        const MxSectionLabel('Android 权限'),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Wrap(
+            spacing: 8, runSpacing: 6,
+            children: [
+              _ActionChip(label: '全选', onTap: () => setState(() => _perms.addAll(PermissionCatalog.android.map((e) => e.name)))),
+              _ActionChip(label: '清空', onTap: () => setState(() => _perms.clear())),
+            ],
+          ),
+        ),
+        ...PermissionCatalog.android.map((item) => MxCard(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(item.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                        Text(item.description, style: TextStyle(fontSize: 11, color: scheme.onSurface.withOpacity(0.5))),
+                      ],
+                    ),
+                  ),
+                  Switch(
+                    value: _perms.contains(item.name),
+                    onChanged: (v) => setState(() => v ? _perms.add(item.name) : _perms.remove(item.name)),
+                  ),
+                ],
+              ),
+            )),
+
+        // ── Flutter 依赖 ──────────────────────────────────────────────────
+        const MxSectionLabel('Flutter 依赖'),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Wrap(
+            spacing: 8, runSpacing: 6,
+            children: [
+              _ActionChip(label: '全选', onTap: () => setState(() => _deps.addAll(DependencyCatalog.flutter.map((e) => e.packageName)))),
+              _ActionChip(label: '清空', onTap: () => setState(() => _deps.clear())),
+            ],
+          ),
+        ),
+        ...DependencyCatalog.flutter.map((item) => MxCard(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(item.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                        Text('${item.packageName}  ·  ${item.description}',
+                            style: TextStyle(fontSize: 11, color: scheme.onSurface.withOpacity(0.5))),
+                      ],
+                    ),
+                  ),
+                  Switch(
+                    value: _deps.contains(item.packageName),
+                    onChanged: (v) => setState(() => v ? _deps.add(item.packageName) : _deps.remove(item.packageName)),
+                  ),
+                ],
+              ),
+            )),
+      ],
+    );
+  }
+}
+
+class _ActionChip extends StatelessWidget {
+  const _ActionChip({required this.label, required this.onTap});
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: scheme.primary.withOpacity(0.10),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: scheme.primary.withOpacity(0.25)),
+        ),
+        child: Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: scheme.primary)),
       ),
     );
   }

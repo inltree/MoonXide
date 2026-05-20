@@ -1,71 +1,277 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 
-// ─── 统一页面容器 ─────────────────────────────────────────────────────────────
-// 所有功能页面都用这个包裹，保证视觉一致性。
-// 不再各自 return Scaffold，而是 return MxPage(...)。
-class MxPage extends StatelessWidget {
-  const MxPage({
+// ═══════════════════════════════════════════════════════════════════════════════
+// MoonXide 自定义 UI 组件库
+// 所有组件都不依赖原生 Material 外观，使用毛玻璃 + 高斯模糊 + 雪山淡蓝风格。
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── 毛玻璃容器 ───────────────────────────────────────────────────────────────
+class MxGlass extends StatelessWidget {
+  const MxGlass({
     super.key,
     required this.child,
-    this.title,
-    this.actions,
-    this.fab,
-    this.bottom,
     this.padding = const EdgeInsets.all(16),
+    this.radius = 20.0,
+    this.blur = 18.0,
+    this.opacity = 0.72,
+    this.border = true,
+    this.shadow = true,
+    this.color,
   });
 
   final Widget child;
-  final String? title;
-  final List<Widget>? actions;
-  final Widget? fab;
-  final PreferredSizeWidget? bottom;
   final EdgeInsets padding;
+  final double radius;
+  final double blur;
+  final double opacity;
+  final bool border;
+  final bool shadow;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      appBar: title == null && actions == null && bottom == null
-          ? null
-          : AppBar(
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              scrolledUnderElevation: 0,
-              automaticallyImplyLeading: false,
-              titleSpacing: 16,
-              title: title != null ? Text(title!, style: const TextStyle(fontWeight: FontWeight.w800)) : null,
-              actions: actions,
-              bottom: bottom,
-            ),
-      floatingActionButton: fab,
-      body: child,
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final base = color ?? (isDark ? const Color(0xFF0F2230) : Colors.white);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(radius),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+        child: Container(
+          padding: padding,
+          decoration: BoxDecoration(
+            color: base.withOpacity(opacity),
+            borderRadius: BorderRadius.circular(radius),
+            border: border ? Border.all(color: Colors.white.withOpacity(isDark ? 0.10 : 0.55), width: 1) : null,
+            boxShadow: shadow
+                ? [BoxShadow(color: const Color(0xFF3B8FC7).withOpacity(isDark ? 0.18 : 0.12), blurRadius: 24, offset: const Offset(0, 8))]
+                : null,
+          ),
+          child: child,
+        ),
+      ),
     );
   }
 }
 
-// ─── 统一卡片 ─────────────────────────────────────────────────────────────────
+// ─── 毛玻璃卡片（可点击） ─────────────────────────────────────────────────────
 class MxCard extends StatelessWidget {
-  const MxCard({super.key, required this.child, this.padding, this.onTap, this.color});
+  const MxCard({
+    super.key,
+    required this.child,
+    this.padding,
+    this.onTap,
+    this.color,
+    this.radius = 18.0,
+    this.blur = 14.0,
+  });
 
   final Widget child;
   final EdgeInsets? padding;
   final VoidCallback? onTap;
   final Color? color;
+  final double radius;
+  final double blur;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final base = color ?? (isDark ? const Color(0xFF0F2230) : Colors.white);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(radius),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+          child: Material(
+            color: base.withOpacity(0.68),
+            borderRadius: BorderRadius.circular(radius),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(radius),
+              onTap: onTap,
+              splashColor: Theme.of(context).colorScheme.primary.withOpacity(0.08),
+              child: Container(
+                padding: padding ?? const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(radius),
+                  border: Border.all(color: Colors.white.withOpacity(isDark ? 0.08 : 0.45)),
+                ),
+                child: child,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── 自定义下拉菜单 ───────────────────────────────────────────────────────────
+class MxDropdown<T> extends StatelessWidget {
+  const MxDropdown({
+    super.key,
+    required this.value,
+    required this.items,
+    required this.onChanged,
+    this.hint,
+    this.prefix,
+  });
+
+  final T? value;
+  final List<MxDropdownItem<T>> items;
+  final ValueChanged<T?> onChanged;
+  final String? hint;
+  final Widget? prefix;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
-      child: Material(
-        color: color ?? scheme.surface.withOpacity(0.72),
-        borderRadius: BorderRadius.circular(20),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(20),
-          onTap: onTap,
-          child: Padding(
-            padding: padding ?? const EdgeInsets.all(16),
-            child: child,
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(14),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+          decoration: BoxDecoration(
+            color: (isDark ? const Color(0xFF0F2230) : Colors.white).withOpacity(0.68),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: scheme.primary.withOpacity(0.18)),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<T>(
+              value: value,
+              hint: hint != null ? Text(hint!, style: TextStyle(color: scheme.onSurface.withOpacity(0.45))) : null,
+              icon: Icon(Icons.expand_more_rounded, color: scheme.primary),
+              dropdownColor: isDark ? const Color(0xFF0F2230) : Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              items: items.map((e) => DropdownMenuItem<T>(value: e.value, child: Row(children: [if (e.icon != null) ...[Icon(e.icon, size: 16, color: scheme.primary), const SizedBox(width: 8)], Text(e.label)]))).toList(),
+              onChanged: onChanged,
+              isExpanded: true,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class MxDropdownItem<T> {
+  const MxDropdownItem({required this.value, required this.label, this.icon});
+  final T value;
+  final String label;
+  final IconData? icon;
+}
+
+// ─── 自定义按钮 ───────────────────────────────────────────────────────────────
+class MxButton extends StatelessWidget {
+  const MxButton({
+    super.key,
+    required this.label,
+    required this.onPressed,
+    this.icon,
+    this.filled = true,
+    this.small = false,
+    this.color,
+  });
+
+  final String label;
+  final VoidCallback? onPressed;
+  final IconData? icon;
+  final bool filled;
+  final bool small;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final c = color ?? scheme.primary;
+    final disabled = onPressed == null;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(small ? 12 : 16),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Material(
+          color: filled ? c.withOpacity(disabled ? 0.28 : 0.88) : c.withOpacity(0.10),
+          borderRadius: BorderRadius.circular(small ? 12 : 16),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(small ? 12 : 16),
+            onTap: onPressed,
+            child: Container(
+              padding: EdgeInsets.symmetric(horizontal: small ? 12 : 18, vertical: small ? 8 : 12),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(small ? 12 : 16),
+                border: Border.all(color: c.withOpacity(filled ? 0.0 : 0.35)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (icon != null) ...[Icon(icon, size: small ? 16 : 18, color: filled ? Colors.white : c), const SizedBox(width: 6)],
+                  Text(label, style: TextStyle(fontWeight: FontWeight.w800, fontSize: small ? 13 : 14, color: filled ? Colors.white : c)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── 自定义输入框 ─────────────────────────────────────────────────────────────
+class MxTextField extends StatelessWidget {
+  const MxTextField({
+    super.key,
+    required this.controller,
+    this.hint,
+    this.label,
+    this.prefix,
+    this.suffix,
+    this.obscure = false,
+    this.minLines = 1,
+    this.maxLines = 1,
+    this.onChanged,
+    this.keyboardType,
+  });
+
+  final TextEditingController controller;
+  final String? hint;
+  final String? label;
+  final Widget? prefix;
+  final Widget? suffix;
+  final bool obscure;
+  final int minLines;
+  final int maxLines;
+  final ValueChanged<String>? onChanged;
+  final TextInputType? keyboardType;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(14),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: TextField(
+          controller: controller,
+          obscureText: obscure,
+          minLines: minLines,
+          maxLines: maxLines,
+          onChanged: onChanged,
+          keyboardType: keyboardType,
+          style: TextStyle(color: scheme.onSurface),
+          decoration: InputDecoration(
+            hintText: hint,
+            labelText: label,
+            prefixIcon: prefix,
+            suffixIcon: suffix,
+            filled: true,
+            fillColor: (isDark ? const Color(0xFF0F2230) : Colors.white).withOpacity(0.68),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: scheme.primary.withOpacity(0.18))),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: scheme.primary.withOpacity(0.18))),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: scheme.primary.withOpacity(0.6), width: 1.5)),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           ),
         ),
       ),
@@ -81,34 +287,10 @@ class MxSectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 20, 4, 8),
+      padding: const EdgeInsets.fromLTRB(2, 18, 2, 8),
       child: Text(
         text.toUpperCase(),
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w900,
-          letterSpacing: 1.4,
-          color: Theme.of(context).colorScheme.onSurface.withOpacity(0.48),
-        ),
-      ),
-    );
-  }
-}
-
-// ─── 行动按钮行 ───────────────────────────────────────────────────────────────
-class MxActionRow extends StatelessWidget {
-  const MxActionRow({super.key, required this.children});
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        children: children
-            .expand((w) => [w, const SizedBox(width: 10)])
-            .toList()
-          ..removeLast(),
+        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.6, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.42)),
       ),
     );
   }
@@ -124,14 +306,14 @@ class MxBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = color ?? Theme.of(context).colorScheme.primary;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(color: c.withOpacity(0.14), borderRadius: BorderRadius.circular(20)),
-      child: Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: c)),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+      decoration: BoxDecoration(color: c.withOpacity(0.14), borderRadius: BorderRadius.circular(20), border: Border.all(color: c.withOpacity(0.28))),
+      child: Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: c)),
     );
   }
 }
 
-// ─── 空状态占位 ───────────────────────────────────────────────────────────────
+// ─── 空状态 ───────────────────────────────────────────────────────────────────
 class MxEmpty extends StatelessWidget {
   const MxEmpty({super.key, required this.icon, required this.label, this.hint});
   final IconData icon;
@@ -141,24 +323,84 @@ class MxEmpty extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Center(
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 32),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 56, color: scheme.onSurface.withOpacity(0.22)),
-          const SizedBox(height: 14),
-          Text(label, style: TextStyle(fontWeight: FontWeight.w700, color: scheme.onSurface.withOpacity(0.55))),
-          if (hint != null) ...[
-            const SizedBox(height: 6),
-            Text(hint!, style: TextStyle(fontSize: 13, color: scheme.onSurface.withOpacity(0.38))),
-          ],
+          Icon(icon, size: 48, color: scheme.onSurface.withOpacity(0.20)),
+          const SizedBox(height: 12),
+          Text(label, style: TextStyle(fontWeight: FontWeight.w700, color: scheme.onSurface.withOpacity(0.48))),
+          if (hint != null) ...[const SizedBox(height: 4), Text(hint!, style: TextStyle(fontSize: 12, color: scheme.onSurface.withOpacity(0.32)))],
         ],
       ),
     );
   }
 }
 
-// ─── 进度条横幅 ───────────────────────────────────────────────────────────────
+// ─── 行动按钮行 ───────────────────────────────────────────────────────────────
+class MxActionRow extends StatelessWidget {
+  const MxActionRow({super.key, required this.children});
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: children.expand((w) => [Expanded(child: w), const SizedBox(width: 10)]).toList()..removeLast(),
+      ),
+    );
+  }
+}
+
+// ─── 图标按钮（毛玻璃） ───────────────────────────────────────────────────────
+class MxIconBtn extends StatelessWidget {
+  const MxIconBtn({super.key, required this.icon, required this.onPressed, this.tooltip, this.active = false, this.size = 40});
+  final IconData icon;
+  final VoidCallback? onPressed;
+  final String? tooltip;
+  final bool active;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final w = ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Material(
+          color: active ? scheme.primary.withOpacity(0.18) : (isDark ? const Color(0xFF0F2230) : Colors.white).withOpacity(0.55),
+          borderRadius: BorderRadius.circular(12),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: onPressed,
+            child: SizedBox(
+              width: size,
+              height: size,
+              child: Icon(icon, size: size * 0.5, color: active ? scheme.primary : scheme.onSurface.withOpacity(0.72)),
+            ),
+          ),
+        ),
+      ),
+    );
+    return tooltip != null ? Tooltip(message: tooltip!, child: w) : w;
+  }
+}
+
+// ─── 分割线 ───────────────────────────────────────────────────────────────────
+class MxDivider extends StatelessWidget {
+  const MxDivider({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Divider(height: 20, thickness: 0.5, color: Theme.of(context).colorScheme.outlineVariant.withOpacity(0.35));
+  }
+}
+
+// ─── 进度横幅 ─────────────────────────────────────────────────────────────────
 class MxProgressBanner extends StatelessWidget {
   const MxProgressBanner({super.key, required this.label});
   final String label;
