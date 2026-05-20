@@ -194,7 +194,7 @@ class _SymbolBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const symbols = ['web', 'fun', 'win', '<', '>', '{', '}', '[', ']', '(', ')', ';'];
+    const symbols = ['{', '}', '(', ')', '[', ']', ';', ':', '.', ',', '=>', '==', '!=', '&&', '||', '/', '_', '"', "'"];
     return SafeArea(
       top: false,
       child: Container(
