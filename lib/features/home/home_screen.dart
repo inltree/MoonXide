@@ -336,7 +336,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             Positioned(
               right: 12,
               bottom: 14,
-              child: _BuildToast(build: build),
+              child: _BuildToast(center: build),
             ),
         ],
       ),
@@ -561,8 +561,8 @@ class _AvatarButton extends StatelessWidget {
 }
 
 class _BuildToast extends StatelessWidget {
-  const _BuildToast({required this.build});
-  final BuildCenterState build;
+  const _BuildToast({required this.center});
+  final BuildCenterState center;
 
   @override
   Widget build(BuildContext context) {
@@ -587,15 +587,15 @@ class _BuildToast extends StatelessWidget {
               SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation(scheme.primary))),
               const SizedBox(width: 8),
               const Expanded(child: Text('正在构建', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900))),
-              Text('${(build.progress * 100).round()}%', style: TextStyle(fontSize: 11, color: scheme.primary, fontWeight: FontWeight.w900)),
+              Text('${(center.progress * 100).round()}%', style: TextStyle(fontSize: 11, color: scheme.primary, fontWeight: FontWeight.w900)),
             ]),
             const SizedBox(height: 8),
             ClipRRect(
               borderRadius: BorderRadius.circular(99),
-              child: LinearProgressIndicator(value: build.progress <= 0 ? null : build.progress, minHeight: 4),
+              child: LinearProgressIndicator(value: center.progress <= 0 ? null : center.progress, minHeight: 4),
             ),
             const SizedBox(height: 6),
-            Text(build.status.split('\n').first, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: scheme.onSurface.withOpacity(0.62))),
+            Text(center.status.split('\n').first, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: scheme.onSurface.withOpacity(0.62))),
           ],
         ),
       ),
