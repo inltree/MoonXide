@@ -456,6 +456,7 @@ class _TopBar extends StatelessWidget {
               child: _FileTab(
                 path: editor.currentPath,
                 modified: editor.modified,
+                dirtyCount: editor.dirtyCount,
                 isDark: isDark,
                 scheme: scheme,
               ),
@@ -518,11 +519,12 @@ class _AvatarButton extends StatelessWidget {
 // ─── 文件名标签页 ─────────────────────────────────────────────────────────────
 class _FileTab extends StatelessWidget {
   const _FileTab({required this.path, required this.modified,
-      required this.isDark, required this.scheme});
+      required this.isDark, required this.scheme, required this.dirtyCount});
   final String path;
   final bool modified;
   final bool isDark;
   final ColorScheme scheme;
+  final int dirtyCount;
 
   @override
   Widget build(BuildContext context) {
@@ -560,7 +562,7 @@ class _FileTab extends StatelessWidget {
                   color: scheme.onSurface.withOpacity(path.isEmpty ? 0.35 : 0.75)),
             ),
           ),
-          if (modified) ...[
+          if (modified || dirtyCount > 0) ...[
             const SizedBox(width: 4),
             Container(
               width: 5, height: 5,

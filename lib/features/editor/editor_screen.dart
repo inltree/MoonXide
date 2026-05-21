@@ -182,6 +182,7 @@ class EditorScreenState extends State<EditorScreen> {
 
     if (failed.isEmpty) {
       center.finish('全部文件已推送：$done / ${pending.length}');
+      editor.markAllSaved(); // 清除所有脏标记，小点消失
     } else {
       center.fail('部分推送失败：成功 $done / ${pending.length}\n${failed.take(3).join('\n')}');
     }

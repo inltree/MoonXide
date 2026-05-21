@@ -139,6 +139,11 @@ class GithubService {
     }
   }
 
+  /// 通用 GitHub REST API 调用（供 AI 工具使用）
+  Future<dynamic> rawRequest(String method, String endpoint, {Map<String, dynamic>? body}) async {
+    return _request(method, endpoint, body: body);
+  }
+
   /// 删除仓库（不可逆）
   Future<void> deleteRepository(String owner, String repo) async {
     await _request('DELETE', '/repos/$owner/$repo');
