@@ -402,12 +402,14 @@ class MxIconBtn extends StatelessWidget {
     super.key,
     required this.icon,
     required this.onPressed,
+    this.onLongPress,
     this.tooltip,
     this.active = false,
     this.size = 40,
   });
   final IconData icon;
   final VoidCallback? onPressed;
+  final VoidCallback? onLongPress;
   final String? tooltip;
   final bool active;
   final double size;
@@ -424,6 +426,7 @@ class MxIconBtn extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(11),
         onTap: onPressed,
+        onLongPress: onLongPress,
         child: SizedBox(
           width: size,
           height: size,
@@ -437,7 +440,7 @@ class MxIconBtn extends StatelessWidget {
         ),
       ),
     );
-    final animated = onPressed == null ? w : _MxPressable(child: w);
+    final animated = (onPressed == null && onLongPress == null) ? w : _MxPressable(child: w);
     return tooltip != null ? Tooltip(message: tooltip!, child: animated) : animated;
   }
 }

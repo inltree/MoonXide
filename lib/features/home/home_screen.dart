@@ -269,6 +269,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               onSearchTap:  () => _editorKey.currentState?.toggleFind(),
               onUndoTap:    editor.undo,
               onRedoTap:    editor.redo,
+              onSaveLongPress: () {
+                final st = _editorKey.currentState;
+                if (st != null) st.saveAll(context);
+              },
               onSaveTap:    () {
                 final st = _editorKey.currentState;
                 if (st != null) st.save(context);
@@ -368,6 +372,7 @@ class _TopBar extends StatelessWidget {
     required this.onUndoTap,
     required this.onRedoTap,
     required this.onSaveTap,
+    required this.onSaveLongPress,
   });
 
   final bool isDark;
@@ -386,6 +391,7 @@ class _TopBar extends StatelessWidget {
   final VoidCallback onUndoTap;
   final VoidCallback onRedoTap;
   final VoidCallback onSaveTap;
+  final VoidCallback onSaveLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -437,7 +443,9 @@ class _TopBar extends StatelessWidget {
             MxIconBtn(
               icon: Icons.save_rounded,
               onPressed: onSaveTap,
-              active: editor.modified,
+              onLongPress: onSaveLongPress,
+              tooltip: editor.dirtyCount > 1 ? '保存当前；长按推送全部 ${editor.dirtyCount} 个文件' : '保存当前文件',
+              active: editor.modified || editor.dirtyCount > 0,
               size: 34,
             ),
             const SizedBox(width: 4),
@@ -655,6 +663,7 @@ class _BuildToast extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final title = center.status.contains('推送') ? '正在推送' : '正在构建';
     return Material(
       color: Colors.transparent,
       child: Container(
@@ -673,7 +682,7 @@ class _BuildToast extends StatelessWidget {
             Row(children: [
               SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation(scheme.primary))),
               const SizedBox(width: 8),
-              const Expanded(child: Text('正在构建', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900))),
+              Expanded(child: Text(title, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900))),
               Text('${(center.progress * 100).round()}%', style: TextStyle(fontSize: 11, color: scheme.primary, fontWeight: FontWeight.w900)),
             ]),
             const SizedBox(height: 8),

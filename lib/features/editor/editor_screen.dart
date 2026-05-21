@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../app/mx_widgets.dart';
 import '../../core/services/app_state.dart';
+import '../../core/services/build_center_state.dart';
 import '../../core/services/editor_state.dart';
 class EditorScreen extends StatefulWidget {
   const EditorScreen({super.key});
@@ -68,6 +69,67 @@ class EditorScreenState extends State<EditorScreen> {
         ScaffoldMessenger.of(ctx)
             .showSnackBar(SnackBar(content: Text('保存失败：$e')));
       }
+    }
+  }
+
+  Future<void> saveAll(BuildContext ctx) async {
+    final editor = ctx.read<EditorState>();
+    final app    = ctx.read<AppState>();
+    final center = ctx.read<BuildCenterState>();
+    final owner  = app.selectedOwner;
+    final repo   = app.selectedRepo;
+    if (owner == null || repo == null || app.github == null) return;
+
+    final pending = Map<String, String>.from(editor.dirtyFiles);
+    if (pending.isEmpty) {
+      center.finish('没有待推送文件');
+      return;
+    }
+
+    center.start('准备推送 ${pending.length} 个文件…');
+    var done = 0;
+    final failed = <String>[];
+
+    for (final entry in pending.entries) {
+      final path = entry.key;
+      final content = entry.value;
+      try {
+        center.updateProgress(
+          statusText: '推送中：$path',
+          value: (done / pending.length).clamp(0.05, 0.95),
+        );
+        String? sha;
+        try {
+          final f = await app.github!.getFile(owner, repo, path);
+          sha = f['sha'] as String?;
+        } catch (_) {}
+        await app.github!.putFile(
+          owner: owner,
+          repo: repo,
+          path: path,
+          message: 'Update $path by MoonXide',
+          contentBase64: base64Encode(utf8.encode(content)),
+          sha: sha,
+        );
+        done++;
+        editor.markPathSaved(path);
+        center.updateProgress(
+          statusText: '已推送 $done / ${pending.length}：$path',
+          value: (done / pending.length).clamp(0.05, 1.0),
+        );
+      } catch (e) {
+        failed.add('$path：$e');
+        center.updateProgress(
+          statusText: '推送失败，继续处理剩余文件：$path',
+          value: (done / pending.length).clamp(0.05, 0.95),
+        );
+      }
+    }
+
+    if (failed.isEmpty) {
+      center.finish('全部文件已推送：$done / ${pending.length}');
+    } else {
+      center.fail('部分推送失败：成功 $done / ${pending.length}\n${failed.take(3).join('\n')}');
     }
   }
 

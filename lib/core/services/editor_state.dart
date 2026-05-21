@@ -14,13 +14,35 @@ class EditorState extends ChangeNotifier {
   String? readOnlyReason;
   String searchText = '';
   String replaceText = '';
-
+  final Map<String, String> _dirtyFiles = {};
   final List<String> _undo = [];
   final List<String> _redo = [];
   bool _internal = false;
 
+  Map<String, String> get dirtyFiles => Map.unmodifiable(_dirtyFiles);
+  int get dirtyCount => _dirtyFiles.length;
+
+
   bool get canUndo => _undo.isNotEmpty;
   bool get canRedo => _redo.isNotEmpty;
+
+  void _trackDirty() {
+    if (currentPath.isNotEmpty && !readOnly) {
+      _dirtyFiles[currentPath] = currentContent;
+    }
+  }
+
+  void markPathSaved(String path) {
+    _dirtyFiles.remove(path);
+    if (path == currentPath) modified = false;
+    notifyListeners();
+  }
+
+  void markAllSaved() {
+    _dirtyFiles.clear();
+    modified = false;
+    notifyListeners();
+  }
 
   String get language {
     final name = currentPath.split('/').last.toLowerCase();
@@ -64,6 +86,7 @@ class EditorState extends ChangeNotifier {
     _redo.clear();
     currentContent = value;
     modified = true;
+    _trackDirty();
     notifyListeners();
   }
 
@@ -73,6 +96,7 @@ class EditorState extends ChangeNotifier {
     _redo.add(currentContent);
     currentContent = _undo.removeLast();
     modified = true;
+    _trackDirty();
     _internal = false;
     notifyListeners();
   }
@@ -83,11 +107,13 @@ class EditorState extends ChangeNotifier {
     _undo.add(currentContent);
     currentContent = _redo.removeLast();
     modified = true;
+    _trackDirty();
     _internal = false;
     notifyListeners();
   }
 
   void markSaved() {
+    if (currentPath.isNotEmpty) _dirtyFiles.remove(currentPath);
     modified = false;
     notifyListeners();
   }
