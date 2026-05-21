@@ -17,6 +17,7 @@ class AppState extends ChangeNotifier {
   String? avatarUrl;
   Map<String, dynamic>? currentUser;
   String? customBackgroundPath;
+  double bgOpacity = 0.72;
   bool loading = false;
   bool tokenValidated = false;
   String? tokenStatus;
@@ -28,6 +29,7 @@ class AppState extends ChangeNotifier {
   Future<void> restore() async {
     final prefs = await SharedPreferences.getInstance();
     customBackgroundPath = prefs.getString('custom_background_path');
+    bgOpacity = prefs.getDouble('bg_opacity') ?? 0.72;
     token = await tokenStore.readToken();
     if (token == null || token!.isEmpty) return;
     github = GithubService(token: token!);
@@ -161,6 +163,13 @@ class AppState extends ChangeNotifier {
     } else {
       await prefs.setString('custom_background_path', path);
     }
+    notifyListeners();
+  }
+
+  Future<void> setBgOpacity(double value) async {
+    bgOpacity = value.clamp(0.0, 1.0);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble('bg_opacity', bgOpacity);
     notifyListeners();
   }
 

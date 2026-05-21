@@ -212,6 +212,9 @@ child: TextField(
                   text: contentController.text,
                   color: editorText,
                   editorScroll: _editorScroll,
+                  keywordColor: contentController.keywordColor,
+                  stringColor: contentController.stringColor,
+                  commentColor: contentController.commentColor,
                 ),
               ),
             ],
@@ -339,9 +342,19 @@ class _CodeController extends TextEditingController {
 }
 
 class _MiniMap extends StatefulWidget {
-  const _MiniMap({required this.text, required this.color, required this.editorScroll});
+  const _MiniMap({
+    required this.text,
+    required this.color,
+    required this.editorScroll,
+    required this.keywordColor,
+    required this.stringColor,
+    required this.commentColor,
+  });
   final String text;
   final Color color;
+  final Color keywordColor;
+  final Color stringColor;
+  final Color commentColor;
   final ScrollController editorScroll;
 
   @override
@@ -349,16 +362,13 @@ class _MiniMap extends StatefulWidget {
 }
 
 class _MiniMapState extends State<_MiniMap> {
-  final ScrollController _mapScroll = ScrollController();
   bool _dragging = false;
 
-  @override
-  void dispose() {
-    _mapScroll.dispose();
-    super.dispose();
-  }
+  static final _kw = RegExp(
+      r'\b(class|void|final|const|var|return|if|else|for|while|switch|case|break|continue|import|package|new|public|private|static|fun|val|def|async|await|try|catch|throw|extends|implements)\b');
+  static final _str = RegExp(r'''("[^"\n]*"|'[^'\n]*')''');
+  static final _cmt = RegExp(r'(//.*|#.*)');
 
-  // 把 minimap 内的 y 偏移映射到编辑器 ScrollController
   void _seekEditor(double localY, double mapHeight) {
     if (!widget.editorScroll.hasClients) return;
     final ratio = (localY / mapHeight).clamp(0.0, 1.0);
@@ -366,49 +376,180 @@ class _MiniMapState extends State<_MiniMap> {
     widget.editorScroll.jumpTo(target);
   }
 
+  double _viewportRatio() {
+    if (!widget.editorScroll.hasClients) return 0;
+    final pos = widget.editorScroll.position;
+    if (pos.maxScrollExtent <= 0) return 1.0;
+    return (pos.viewportDimension / (pos.maxScrollExtent + pos.viewportDimension)).clamp(0.0, 1.0);
+  }
+
+  double _scrollRatio() {
+    if (!widget.editorScroll.hasClients) return 0;
+    final pos = widget.editorScroll.position;
+    if (pos.maxScrollExtent <= 0) return 0;
+    return (pos.pixels / pos.maxScrollExtent).clamp(0.0, 1.0);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    widget.editorScroll.addListener(_onScroll);
+  }
+
+  @override
+  void didUpdateWidget(_MiniMap old) {
+    super.didUpdateWidget(old);
+    if (old.editorScroll != widget.editorScroll) {
+      old.editorScroll.removeListener(_onScroll);
+      widget.editorScroll.addListener(_onScroll);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.editorScroll.removeListener(_onScroll);
+    super.dispose();
+  }
+
+  void _onScroll() => setState(() {});
+
   @override
   Widget build(BuildContext context) {
-    final lines = widget.text.split('\n');
-    final lineH = 3.0;
-    final totalH = lines.length * (lineH + 1.0);
-
     return GestureDetector(
       onLongPressStart: (d) {
         setState(() => _dragging = true);
         _seekEditor(d.localPosition.dy, context.size?.height ?? 1);
       },
-      onLongPressMoveUpdate: (d) {
-        _seekEditor(d.localPosition.dy, context.size?.height ?? 1);
-      },
+      onLongPressMoveUpdate: (d) =>
+          _seekEditor(d.localPosition.dy, context.size?.height ?? 1),
       onLongPressEnd: (_) => setState(() => _dragging = false),
-      onTapDown: (d) => _seekEditor(d.localPosition.dy, context.size?.height ?? 1),
+      onTapDown: (d) =>
+          _seekEditor(d.localPosition.dy, context.size?.height ?? 1),
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 120),
+        duration: const Duration(milliseconds: 100),
         decoration: BoxDecoration(
           border: _dragging
-              ? Border(left: BorderSide(color: widget.color.withOpacity(0.35), width: 1))
+              ? Border(left: BorderSide(
+                  color: widget.color.withOpacity(0.4), width: 1.5))
               : null,
         ),
-        child: ListView.builder(
-          controller: _mapScroll,
-          padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: lines.length,
-          itemBuilder: (_, i) {
-            final len = lines[i].trimRight().length;
-            final w = (len.clamp(0, 60) as num).toDouble() / 60.0;
-            return Container(
-              margin: const EdgeInsets.symmetric(vertical: 0.5),
-              width: 34 * w,
-              height: lineH,
-              decoration: BoxDecoration(
-                color: widget.color.withOpacity(len == 0 ? 0.0 : 0.20),
-                borderRadius: BorderRadius.circular(1),
-              ),
-            );
-          },
-        ),
+        child: LayoutBuilder(builder: (_, constraints) {
+          return CustomPaint(
+            size: Size(constraints.maxWidth, constraints.maxHeight),
+            painter: _MiniMapPainter(
+              text: widget.text,
+              baseColor: widget.color,
+              keywordColor: widget.keywordColor,
+              stringColor: widget.stringColor,
+              commentColor: widget.commentColor,
+              scrollRatio: _scrollRatio(),
+              viewportRatio: _viewportRatio(),
+              dragging: _dragging,
+            ),
+          );
+        }),
       ),
     );
   }
+}
+
+class _MiniMapPainter extends CustomPainter {
+  _MiniMapPainter({
+    required this.text,
+    required this.baseColor,
+    required this.keywordColor,
+    required this.stringColor,
+    required this.commentColor,
+    required this.scrollRatio,
+    required this.viewportRatio,
+    required this.dragging,
+  });
+
+  final String text;
+  final Color baseColor;
+  final Color keywordColor;
+  final Color stringColor;
+  final Color commentColor;
+  final double scrollRatio;
+  final double viewportRatio;
+  final bool dragging;
+
+  static final _kw = RegExp(
+      r'\b(class|void|final|const|var|return|if|else|for|while|switch|case|break|continue|import|package|new|public|private|static|fun|val|def|async|await|try|catch|throw|extends|implements)\b');
+  static final _str = RegExp(r'''("[^"\n]*"|'[^'\n]*')''');
+  static final _cmt = RegExp(r'(//.*|#.*)');
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final lines = text.split('\n');
+    const lineH = 2.5;
+    const lineGap = 0.8;
+    const maxW = 1.0; // max width per char in px
+    const charW = 0.55;
+    const padH = 3.0;
+    const padV = 4.0;
+
+    final totalLines = lines.length;
+    final totalH = totalLines * (lineH + lineGap);
+    final scale = totalH > (size.height - padV * 2)
+        ? (size.height - padV * 2) / totalH
+        : 1.0;
+
+    // 视口高亮框
+    final vpH = size.height * viewportRatio;
+    final vpTop = (size.height - vpH) * scrollRatio;
+    final vpPaint = Paint()
+      ..color = baseColor.withOpacity(dragging ? 0.14 : 0.08)
+      ..style = PaintingStyle.fill;
+    canvas.drawRect(Rect.fromLTWH(0, vpTop, size.width, vpH), vpPaint);
+    final vpBorderPaint = Paint()
+      ..color = baseColor.withOpacity(0.22)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.8;
+    canvas.drawRect(Rect.fromLTWH(0, vpTop, size.width, vpH), vpBorderPaint);
+
+    // 绘制代码行
+    for (var i = 0; i < lines.length; i++) {
+      final y = padV + i * (lineH + lineGap) * scale;
+      if (y > size.height) break;
+      final line = lines[i];
+      if (line.trim().isEmpty) continue;
+
+      // 判断整行类型（简化：注释 > 字符串 > 关键字 > 普通）
+      final isCmt = _cmt.hasMatch(line);
+      final isStr = !isCmt && _str.hasMatch(line);
+      final isKw  = !isCmt && !isStr && _kw.hasMatch(line);
+
+      final indent = line.length - line.trimLeft().length;
+      final contentLen = line.trimRight().length - indent;
+      if (contentLen <= 0) continue;
+
+      final x0 = padH + indent * charW;
+      final w  = (contentLen * charW).clamp(0.0, size.width - x0 - padH);
+
+      final color = isCmt ? commentColor
+          : isStr ? stringColor
+          : isKw  ? keywordColor
+          : baseColor;
+
+      final paint = Paint()
+        ..color = color.withOpacity(0.55)
+        ..style = PaintingStyle.fill;
+
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(x0, y, w, lineH * scale),
+          const Radius.circular(0.5),
+        ),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_MiniMapPainter old) =>
+      old.text != text ||
+      old.scrollRatio != scrollRatio ||
+      old.viewportRatio != viewportRatio ||
+      old.dragging != dragging;
 }

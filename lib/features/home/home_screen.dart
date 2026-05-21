@@ -237,7 +237,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ),
           if (state.customBackgroundPath != null)
             Positioned.fill(
-              child: ColoredBox(color: (isDark ? Colors.black : Colors.white).withOpacity(isDark ? 0.68 : 0.72)),
+              child: ColoredBox(color: (isDark ? Colors.black : Colors.white)
+                  .withOpacity(1.0 - state.bgOpacity)),
             ),
           // ── 编辑器全屏底层（顶部留出工具栏空间） ──────────────────────────────
           Positioned(
@@ -394,6 +395,9 @@ class _TopBar extends StatelessWidget {
         ? Colors.white.withOpacity(0.07)
         : Colors.black.withOpacity(0.06);
 
+    // 右侧面板激活状态
+    final rightActive = rightPanel != _RightPanel.none;
+
     return Container(
       decoration: BoxDecoration(
         color: bg,
@@ -404,8 +408,7 @@ class _TopBar extends StatelessWidget {
         height: _HomeScreenState._toolbarH,
         child: Row(
           children: [
-            const SizedBox(width: 4),
-            // 左上角：文件树
+            // ── 文件树按钮
             MxIconBtn(
               icon: Icons.menu_rounded,
               onPressed: onMenuTap,
@@ -413,116 +416,54 @@ class _TopBar extends StatelessWidget {
               active: leftOpen,
               size: 40,
             ),
-            const SizedBox(width: 4),
-            // 查找
+            // ── 查找
             MxIconBtn(
               icon: Icons.search_rounded,
               onPressed: onSearchTap,
-              tooltip: '查找替换',
+              tooltip: '查找',
               size: 36,
             ),
-            const SizedBox(width: 2),
+            // ── 撤销/重做/保存 紧凑排列
             MxIconBtn(
               icon: Icons.undo_rounded,
               onPressed: editor.canUndo ? onUndoTap : null,
-              tooltip: '撤销',
-              size: 34,
+              size: 32,
             ),
             MxIconBtn(
               icon: Icons.redo_rounded,
               onPressed: editor.canRedo ? onRedoTap : null,
-              tooltip: '重做',
-              size: 34,
+              size: 32,
             ),
-            const SizedBox(width: 2),
-            // 保存（有修改时高亮）
             MxIconBtn(
               icon: Icons.save_rounded,
               onPressed: onSaveTap,
-              tooltip: '保存',
               active: editor.modified,
-              size: 36,
-            ),
-            const SizedBox(width: 4),
-            // 文件名胶囊
-            Expanded(
-              child: Container(
-                height: 34,
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? Colors.white.withOpacity(0.05)
-                      : Colors.black.withOpacity(0.04),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: isDark
-                        ? Colors.white.withOpacity(0.08)
-                        : Colors.black.withOpacity(0.07),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.insert_drive_file_rounded,
-                        size: 12, color: scheme.primary),
-                    const SizedBox(width: 5),
-                    Expanded(
-                      child: Text(
-                        editor.currentPath.isEmpty
-                            ? '未打开文件'
-                            : editor.currentPath.split('/').last,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                            fontSize: 12,
-                            color: scheme.onSurface.withOpacity(0.65)),
-                      ),
-                    ),
-                    if (editor.modified)
-                      Container(
-                        width: 6, height: 6,
-                        margin: const EdgeInsets.only(left: 4),
-                        decoration: BoxDecoration(
-                          color: scheme.primary,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(width: 4),
-            // 右侧功能图标
-            MxIconBtn(
-              icon: Icons.auto_awesome_rounded,
-              onPressed: onAiTap,
-              tooltip: 'AI',
-              active: rightPanel == _RightPanel.ai,
-              size: 36,
-            ),
-            MxIconBtn(
-              icon: Icons.play_arrow_rounded,
-              onPressed: onBuildTap,
-              tooltip: '编译',
-              active: rightPanel == _RightPanel.build,
-              size: 36,
-            ),
-            MxIconBtn(
-              icon: Icons.rocket_launch_rounded,
-              onPressed: onReleaseTap,
-              tooltip: '发行',
-              active: rightPanel == _RightPanel.release,
-              size: 36,
-            ),
-            MxIconBtn(
-              icon: Icons.tune_rounded,
-              onPressed: onSettingsTap,
-              tooltip: '设置',
-              active: rightPanel == _RightPanel.settings,
               size: 34,
             ),
             const SizedBox(width: 4),
-            _AvatarButton(state: state),
+            // ── 文件名胶囊（Expanded 保证不被挤）
+            Expanded(
+              child: _FileTab(
+                path: editor.currentPath,
+                modified: editor.modified,
+                isDark: isDark,
+                scheme: scheme,
+              ),
+            ),
             const SizedBox(width: 4),
+            // ── 右侧功能：AI / 编译 / 发行 / 设置 收进 PopupMenu
+            _RightMenu(
+              rightPanel: rightPanel,
+              onAiTap: onAiTap,
+              onBuildTap: onBuildTap,
+              onReleaseTap: onReleaseTap,
+              onSettingsTap: onSettingsTap,
+              isDark: isDark,
+              scheme: scheme,
+            ),
+            const SizedBox(width: 2),
+            _AvatarButton(state: state),
+            const SizedBox(width: 6),
           ],
         ),
       ),
@@ -560,6 +501,148 @@ class _AvatarButton extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+// ─── 文件名标签页 ─────────────────────────────────────────────────────────────
+class _FileTab extends StatelessWidget {
+  const _FileTab({required this.path, required this.modified,
+      required this.isDark, required this.scheme});
+  final String path;
+  final bool modified;
+  final bool isDark;
+  final ColorScheme scheme;
+
+  @override
+  Widget build(BuildContext context) {
+    final name = path.isEmpty ? '未打开文件' : path.split('/').last;
+    final dir  = path.isEmpty ? '' : path.contains('/')
+        ? path.substring(0, path.lastIndexOf('/'))
+        : '';
+    return Container(
+      height: 30,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      decoration: BoxDecoration(
+        color: isDark
+            ? Colors.white.withOpacity(0.05)
+            : Colors.black.withOpacity(0.04),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withOpacity(0.08)
+              : Colors.black.withOpacity(0.07),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.insert_drive_file_rounded, size: 11, color: scheme.primary),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(
+              name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: scheme.onSurface.withOpacity(path.isEmpty ? 0.35 : 0.75)),
+            ),
+          ),
+          if (modified) ...[
+            const SizedBox(width: 4),
+            Container(
+              width: 5, height: 5,
+              decoration: BoxDecoration(color: scheme.primary, shape: BoxShape.circle),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+// ─── 右侧功能菜单（收进 PopupMenu 减少拥挤） ──────────────────────────────────
+class _RightMenu extends StatelessWidget {
+  const _RightMenu({
+    required this.rightPanel,
+    required this.onAiTap,
+    required this.onBuildTap,
+    required this.onReleaseTap,
+    required this.onSettingsTap,
+    required this.isDark,
+    required this.scheme,
+  });
+  final _RightPanel rightPanel;
+  final VoidCallback onAiTap;
+  final VoidCallback onBuildTap;
+  final VoidCallback onReleaseTap;
+  final VoidCallback onSettingsTap;
+  final bool isDark;
+  final ColorScheme scheme;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = rightPanel != _RightPanel.none;
+    return PopupMenuButton<int>(
+      tooltip: '功能面板',
+      offset: const Offset(0, 44),
+      color: isDark ? const Color(0xFF0A1C2C) : Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: isDark
+            ? Colors.white.withOpacity(0.08)
+            : Colors.black.withOpacity(0.06)),
+      ),
+      onSelected: (v) {
+        switch (v) {
+          case 0: onAiTap(); break;
+          case 1: onBuildTap(); break;
+          case 2: onReleaseTap(); break;
+          case 3: onSettingsTap(); break;
+        }
+      },
+      itemBuilder: (_) => [
+        _menuItem(0, Icons.auto_awesome_rounded, 'AI 助手',
+            rightPanel == _RightPanel.ai, scheme),
+        _menuItem(1, Icons.play_arrow_rounded, '云编译',
+            rightPanel == _RightPanel.build, scheme),
+        _menuItem(2, Icons.rocket_launch_rounded, '发行版',
+            rightPanel == _RightPanel.release, scheme),
+        _menuItem(3, Icons.tune_rounded, '设置',
+            rightPanel == _RightPanel.settings, scheme),
+      ],
+      child: Container(
+        width: 36, height: 36,
+        decoration: BoxDecoration(
+          color: active ? scheme.primary.withOpacity(0.12) : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(
+          active ? Icons.dashboard_rounded : Icons.dashboard_outlined,
+          size: 18,
+          color: active ? scheme.primary : scheme.onSurface.withOpacity(0.52),
+        ),
+      ),
+    );
+  }
+
+  PopupMenuItem<int> _menuItem(int v, IconData icon, String label,
+      bool active, ColorScheme scheme) {
+    return PopupMenuItem<int>(
+      value: v,
+      height: 40,
+      child: Row(children: [
+        Icon(icon, size: 16,
+            color: active ? scheme.primary : scheme.onSurface.withOpacity(0.6)),
+        const SizedBox(width: 10),
+        Text(label,
+            style: TextStyle(
+                fontSize: 13,
+                fontWeight: active ? FontWeight.w800 : FontWeight.w500,
+                color: active ? scheme.primary : scheme.onSurface.withOpacity(0.8))),
+      ]),
     );
   }
 }

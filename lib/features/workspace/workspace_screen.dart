@@ -455,35 +455,129 @@ class _RepoBar extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
-      padding: const EdgeInsets.fromLTRB(8, 6, 6, 6),
+      height: 40,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
       decoration: BoxDecoration(
         color: (isDark ? const Color(0xFF0A1C2C) : const Color(0xFFEAF4FF)).withOpacity(0.95),
-        border: Border(bottom: BorderSide(color: isDark ? Colors.white.withOpacity(0.07) : Colors.black.withOpacity(0.06))),
+        border: Border(bottom: BorderSide(
+            color: isDark ? Colors.white.withOpacity(0.07) : Colors.black.withOpacity(0.06))),
       ),
       child: Row(children: [
+        // 紧凑仓库选择器
         Expanded(
           child: repos.isEmpty
-              ? Text(loading ? '加载仓库中…' : '暂无仓库', style: TextStyle(fontSize: 12, color: scheme.onSurface.withOpacity(0.45)))
-              : MxDropdown<String>(
-                  value: selected == null || selected!.isEmpty ? null : selected,
-                  hint: '点击选择仓库',
-                  items: repos.map((r) => MxDropdownItem<String>(
-                    value: r['name'] as String,
-                    label: r['name'] as String,
-                    icon: r['private'] == true ? Icons.lock_rounded : Icons.folder_open_rounded,
-                  )).toList(),
-                  onChanged: (name) {
-                    if (name == null) return;
-                    final r = repos.firstWhere((e) => e['name'] == name);
-                    onSelect(r);
-                  },
+              ? Text(loading ? '加载中…' : '暂无仓库',
+                  style: TextStyle(fontSize: 12, color: scheme.onSurface.withOpacity(0.4)))
+              : _CompactRepoSelector(
+                  repos: repos,
+                  selected: selected,
+                  isDark: isDark,
+                  scheme: scheme,
+                  onSelect: onSelect,
                 ),
         ),
-        MxIconBtn(icon: Icons.upload_rounded, onPressed: onUpload, tooltip: '上传', size: 32),
-        MxIconBtn(icon: Icons.refresh_rounded, onPressed: onRefresh, tooltip: '刷新', size: 32),
-        MxIconBtn(icon: Icons.add_rounded, onPressed: onNew, tooltip: '新建仓库', size: 32),
-        MxIconBtn(icon: Icons.more_horiz_rounded, onPressed: canManage ? onManage : null, tooltip: '管理仓库', size: 32),
+        const SizedBox(width: 2),
+        MxIconBtn(icon: Icons.upload_file_rounded, onPressed: onUpload, tooltip: '上传', size: 30),
+        MxIconBtn(icon: Icons.refresh_rounded, onPressed: onRefresh, tooltip: '刷新', size: 30),
+        MxIconBtn(icon: Icons.create_new_folder_outlined, onPressed: onNew, tooltip: '新建', size: 30),
+        MxIconBtn(icon: Icons.more_vert_rounded,
+            onPressed: canManage ? onManage : null, tooltip: '管理', size: 30),
       ]),
+    );
+  }
+}
+
+// ─── 紧凑仓库选择器 ───────────────────────────────────────────────────────────
+class _CompactRepoSelector extends StatelessWidget {
+  const _CompactRepoSelector({
+    required this.repos, required this.selected,
+    required this.isDark, required this.scheme, required this.onSelect,
+  });
+  final List<Map<String, dynamic>> repos;
+  final String? selected;
+  final bool isDark;
+  final ColorScheme scheme;
+  final ValueChanged<Map<String, dynamic>> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final current = selected == null || selected!.isEmpty ? null
+        : repos.where((r) => r['name'] == selected).firstOrNull;
+    final isPrivate = current?['private'] == true;
+
+    return PopupMenuButton<String>(
+      tooltip: '选择仓库',
+      offset: const Offset(0, 32),
+      color: isDark ? const Color(0xFF0A1C2C) : Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: isDark
+            ? Colors.white.withOpacity(0.08)
+            : Colors.black.withOpacity(0.06)),
+      ),
+      onSelected: (name) {
+        final r = repos.firstWhere((e) => e['name'] == name);
+        onSelect(r);
+      },
+      itemBuilder: (_) => repos.map((r) {
+        final name = r['name'] as String;
+        final priv = r['private'] == true;
+        final active = name == selected;
+        return PopupMenuItem<String>(
+          value: name,
+          height: 36,
+          child: Row(children: [
+            Icon(priv ? Icons.lock_rounded : Icons.folder_open_rounded,
+                size: 13,
+                color: active ? scheme.primary : scheme.onSurface.withOpacity(0.5)),
+            const SizedBox(width: 8),
+            Expanded(child: Text(name,
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: active ? FontWeight.w800 : FontWeight.w500,
+                    color: active ? scheme.primary : scheme.onSurface.withOpacity(0.85)))),
+          ]),
+        );
+      }).toList(),
+      child: Container(
+        height: 26,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        decoration: BoxDecoration(
+          color: isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.04),
+          borderRadius: BorderRadius.circular(7),
+          border: Border.all(color: isDark
+              ? Colors.white.withOpacity(0.10)
+              : Colors.black.withOpacity(0.08)),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(
+            current == null ? Icons.folder_off_rounded
+                : (isPrivate ? Icons.lock_rounded : Icons.folder_open_rounded),
+            size: 12,
+            color: current == null
+                ? scheme.onSurface.withOpacity(0.3)
+                : scheme.primary,
+          ),
+          const SizedBox(width: 5),
+          Flexible(
+            child: Text(
+              current == null ? '选择仓库' : (current['name'] as String),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: current == null
+                      ? scheme.onSurface.withOpacity(0.4)
+                      : scheme.onSurface.withOpacity(0.85)),
+            ),
+          ),
+          const SizedBox(width: 3),
+          Icon(Icons.expand_more_rounded, size: 13,
+              color: scheme.onSurface.withOpacity(0.4)),
+        ]),
+      ),
     );
   }
 }

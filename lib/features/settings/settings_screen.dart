@@ -90,22 +90,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
         MxCard(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
-              Icon(Icons.wallpaper_rounded, color: scheme.primary, size: 20),
-              const SizedBox(width: 12),
-              const Expanded(child: Text('自定义编辑器背景', style: TextStyle(fontWeight: FontWeight.w800))),
+              Icon(Icons.wallpaper_rounded, color: scheme.primary, size: 18),
+              const SizedBox(width: 10),
+              const Expanded(child: Text('自定义背景', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13))),
+              if (widget.state.customBackgroundPath != null)
+                MxIconBtn(icon: Icons.close_rounded, size: 30,
+                  onPressed: () => widget.state.setCustomBackground(null)),
             ]),
             if (widget.state.customBackgroundPath != null) ...[
-              const SizedBox(height: 10),
+              const SizedBox(height: 8),
               ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.file(File(widget.state.customBackgroundPath!), height: 90, width: double.infinity, fit: BoxFit.cover),
+                borderRadius: BorderRadius.circular(10),
+                child: Image.file(File(widget.state.customBackgroundPath!),
+                    height: 80, width: double.infinity, fit: BoxFit.cover),
               ),
+              const SizedBox(height: 10),
+              Row(children: [
+                Icon(Icons.opacity_rounded, size: 14, color: scheme.onSurface.withOpacity(0.45)),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: SliderTheme(
+                    data: SliderTheme.of(context).copyWith(
+                      trackHeight: 2,
+                      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
+                      overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+                    ),
+                    child: Slider(
+                      value: widget.state.bgOpacity,
+                      min: 0.1, max: 1.0,
+                      onChanged: widget.state.setBgOpacity,
+                    ),
+                  ),
+                ),
+                Text('${(widget.state.bgOpacity * 100).round()}%',
+                    style: TextStyle(fontSize: 11, color: scheme.onSurface.withOpacity(0.5))),
+              ]),
+            ] else ...[
+              const SizedBox(height: 10),
+              MxButton(label: '选择图片', icon: Icons.image_rounded,
+                  onPressed: _pickBackground, filled: false, small: true),
             ],
-            const SizedBox(height: 12),
-            MxActionRow(children: [
-              MxButton(label: '上传图片', icon: Icons.image_rounded, onPressed: _pickBackground, filled: false),
-              MxButton(label: '清除背景', icon: Icons.cleaning_services_rounded, onPressed: () => widget.state.setCustomBackground(null), color: Colors.red),
-            ]),
           ]),
         ),
 
