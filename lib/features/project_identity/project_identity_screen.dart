@@ -100,7 +100,7 @@ class _ProjectIdentityScreenState extends State<ProjectIdentityScreen> {
                 MxCard(child: Row(children: [
                   Icon(Icons.image_rounded, color: scheme.primary),
                   const SizedBox(width: 10),
-                  Expanded(child: Text(iconPath ?? '未选择，默认使用 Flutter 生成图标', maxLines: 2, overflow: TextOverflow.ellipsis)),
+                  Expanded(child: Text(iconPath ?? '未选择图标', maxLines: 2, overflow: TextOverflow.ellipsis)),
                   MxButton(label: '选择', onPressed: _pickIcon, small: true, filled: false),
                 ])),
 if (validation != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(validation!, style: TextStyle(color: scheme.error))),
@@ -142,8 +142,7 @@ if (validation != null) Padding(padding: const EdgeInsets.only(top: 8), child: T
                     ),
                   );
                 }),
-              ]
-              ]),
+                ]),
       ),
     );
   }
