@@ -18,6 +18,14 @@ class _ProjectIdentityScreenState extends State<ProjectIdentityScreen> {
   final packageName = TextEditingController();
   final versionName = TextEditingController();
   final versionCode = TextEditingController();
+  String _selectedTemplate = 'apk_dart';
+
+  static const _templates = {
+    'apk_dart': {'name': 'Flutter / Dart APK', 'icon': Icons.flutter_dash, 'desc': 'flutter create → flutter build apk'},
+    'apk_kotlin': {'name': 'Android Kotlin APK', 'icon': Icons.android_rounded, 'desc': 'Gradle Kotlin → assembleRelease'},
+    'apk_java': {'name': 'Android Java APK', 'icon': Icons.local_cafe_rounded, 'desc': 'Gradle Java → assembleRelease'},
+    'native_cpp': {'name': 'C/C++ 原生可执行', 'icon': Icons.memory_rounded, 'desc': 'clang++ main.cpp -o app'},
+  };
   String? iconPath;
   String? validation;
   bool loading = true;
@@ -95,9 +103,46 @@ class _ProjectIdentityScreenState extends State<ProjectIdentityScreen> {
                   Expanded(child: Text(iconPath ?? '未选择，默认使用 Flutter 生成图标', maxLines: 2, overflow: TextOverflow.ellipsis)),
                   MxButton(label: '选择', onPressed: _pickIcon, small: true, filled: false),
                 ])),
-                if (validation != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(validation!, style: TextStyle(color: scheme.error))),
+if (validation != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(validation!, style: TextStyle(color: scheme.error))),
                 const SizedBox(height: 16),
                 MxButton(label: '保存配置', icon: Icons.save_rounded, onPressed: _save),
+
+                const MxSectionLabel('编译模板'),
+                ..._templates.entries.map((e) {
+                  final selected = _selectedTemplate == e.key;
+                  return GestureDetector(
+                    onTap: () => setState(() => _selectedTemplate = e.key),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: selected
+                            ? scheme.primary.withOpacity(0.10)
+                            : scheme.surface.withOpacity(0.6),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: selected ? scheme.primary.withOpacity(0.55) : scheme.onSurface.withOpacity(0.10),
+                          width: selected ? 1.5 : 1,
+                        ),
+                      ),
+                      child: Row(children: [
+                        Icon(e.value['icon'] as IconData, size: 18,
+                            color: selected ? scheme.primary : scheme.onSurface.withOpacity(0.5)),
+                        const SizedBox(width: 12),
+                        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(e.value['name'] as String,
+                              style: TextStyle(fontSize: 13, fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                                  color: selected ? scheme.primary : scheme.onSurface.withOpacity(0.85))),
+                          Text(e.value['desc'] as String,
+                              style: TextStyle(fontSize: 11, color: scheme.onSurface.withOpacity(0.45))),
+                        ])),
+                        if (selected) Icon(Icons.check_circle_rounded, size: 18, color: scheme.primary),
+                      ]),
+                    ),
+                  );
+                }),
+              ]
               ]),
       ),
     );

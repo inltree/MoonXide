@@ -3,10 +3,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import '../../app/mx_widgets.dart';
 import '../../core/services/app_state.dart';
-import '../../core/services/signing_store.dart';
 import '../ai_settings/ai_settings_screen.dart';
-import '../project_identity/project_identity_screen.dart';
-import '../package_editor/package_editor_screen.dart';
+import '../signing/signing_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   final AppState state;
@@ -17,8 +15,6 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  final _signingStore = SigningStore();
-
   Future<void> _pickBackground() async {
     final r = await FilePicker.platform.pickFiles(type: FileType.image, withData: false);
     final path = r?.files.single.path;
@@ -56,34 +52,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
           onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AiSettingsScreen())),
         ),
 
-        const MxSectionLabel('安装包配置'),
-        _SettingRow(
-          icon: Icons.apps_rounded,
-          title: '包名、版本、模板',
-          subtitle: 'APK 元数据、默认编译模板、自定义模板导入导出',
-          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PackageEditorScreen())),
-        ),
-        _SettingRow(
-          icon: Icons.badge_rounded,
-          title: '项目身份配置',
-          subtitle: '应用名称、包名、版本、图标',
-          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ProjectIdentityScreen())),
-        ),
-
         const MxSectionLabel('签名'),
         _SettingRow(
           icon: Icons.security_rounded,
           title: 'Keystore 签名配置',
-          subtitle: 'Release 包签名必备',
-          onTap: () async {
-            await _signingStore.save(
-              keystore: '/sdcard/Download/moonxide.jks',
-              alias: 'moonxide',
-              storePassword: '******',
-              keyPassword: '******',
-            );
-            if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('签名配置已保存')));
-          },
+          subtitle: 'Release 包签名 · 密钥别名 · 密码',
+          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SigningScreen())),
         ),
 
         const MxSectionLabel('背景'),
@@ -133,10 +107,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ]),
         ),
 
-        const MxSectionLabel('自动化'),
-        const MxCard(
-          child: Text('依赖管理、权限申请、Manifest 修改等操作由 AI 任务统一执行。'),
-        ),
+        
       ],
     );
   }

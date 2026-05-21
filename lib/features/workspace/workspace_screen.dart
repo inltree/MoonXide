@@ -6,7 +6,7 @@ import '../../app/mx_widgets.dart';
 import '../../core/services/app_state.dart';
 import '../../core/services/editor_state.dart';
 import '../../core/services/local_file_upload_service.dart';
-import '../package_editor/package_editor_screen.dart';
+import '../project_identity/project_identity_screen.dart';
 
 class _TreeNode {
   final String name;
@@ -56,6 +56,114 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
   final _renameCtrl = TextEditingController();
   bool _private = true;
   bool _autoInit = true;
+  String _selectedTemplate = 'none';
+
+  // ── 内置模板定义 ──────────────────────────────────────────────────────────
+  static const _templates = {
+    'none': {'label': '空仓库（不推送模板）', 'icon': Icons.folder_outlined},
+    'flutter': {'label': 'Flutter / Dart 应用', 'icon': Icons.flutter_dash},
+    'android_kotlin': {'label': 'Android Kotlin 应用', 'icon': Icons.android_rounded},
+    'android_java': {'label': 'Android Java 应用', 'icon': Icons.local_cafe_rounded},
+    'cpp_native': {'label': 'C/C++ 原生可执行', 'icon': Icons.memory_rounded},
+  };
+
+  // 模板文件内容
+  Map<String, String> _templateFiles(String tpl, String repoName) {
+    switch (tpl) {
+      case 'flutter':
+        return {
+          'pubspec.yaml': '''name: ${repoName.replaceAll('-', '_').toLowerCase()}
+description: A Flutter application.
+version: 1.0.0+1
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+dependencies:
+  flutter:
+    sdk: flutter
+flutter:
+  uses-material-design: true
+''',
+          'lib/main.dart': '''import 'package:flutter/material.dart';
+
+void main() => runApp(const MyApp());
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: '$repoName',
+      home: Scaffold(
+        appBar: AppBar(title: const Text('$repoName')),
+        body: const Center(child: Text('Hello, World!')),
+      ),
+    );
+  }
+}
+''',
+          'README.md': '# $repoName\n\nA Flutter application.\n',
+        };
+      case 'android_kotlin':
+        return {
+          'app/src/main/java/com/example/app/MainActivity.kt': '''package com.example.app
+
+import android.os.Bundle
+import androidx.appcompat.app.AppCompatActivity
+
+class MainActivity : AppCompatActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+    }
+}
+''',
+          'app/src/main/res/layout/activity_main.xml': '''<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:gravity="center">
+    <TextView android:text="Hello, $repoName!" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+</LinearLayout>
+''',
+          'README.md': '# $repoName\n\nAn Android Kotlin application.\n',
+        };
+      case 'android_java':
+        return {
+          'app/src/main/java/com/example/app/MainActivity.java': '''package com.example.app;
+
+import android.os.Bundle;
+import androidx.appcompat.app.AppCompatActivity;
+
+public class MainActivity extends AppCompatActivity {
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
+    }
+}
+''',
+          'README.md': '# $repoName\n\nAn Android Java application.\n',
+        };
+      case 'cpp_native':
+        return {
+          'main.cpp': '''#include <iostream>
+
+int main() {
+    std::cout << "Hello, $repoName!" << std::endl;
+    return 0;
+}
+''',
+          'CMakeLists.txt': '''cmake_minimum_required(VERSION 3.10)
+project($repoName)
+set(CMAKE_CXX_STANDARD 17)
+add_executable(\${PROJECT_NAME} main.cpp)
+''',
+          'README.md': '# $repoName\n\nA C++ native application.\n',
+        };
+      default:
+        return {};
+    }
+  }
 
   @override
   void initState() {
@@ -231,19 +339,37 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
 
   Future<void> _createRepo() async {
     if (_nameCtrl.text.trim().isEmpty || widget.state.github == null) return;
-    setState(() => _loadingRepos = true);
+    setState(() { _loadingRepos = true; _error = null; });
     try {
+      final repoName = _nameCtrl.text.trim();
       final r = await widget.state.github!.createRepository(
-        name: _nameCtrl.text.trim(),
+        name: repoName,
         private: _private,
-        autoInit: _autoInit,
+        autoInit: _autoInit || _selectedTemplate != 'none',
         description: _descCtrl.text.trim(),
       );
       final owner = r['owner']['login'] as String;
-      final name = r['name'] as String;
+      final name  = r['name'] as String;
       widget.state.selectRepository(owner, name);
       _nameCtrl.clear();
       _descCtrl.clear();
+
+      // 推送模板文件
+      if (_selectedTemplate != 'none') {
+        final files = _templateFiles(_selectedTemplate, repoName);
+        for (final entry in files.entries) {
+          try {
+            await widget.state.github!.putFile(
+              owner: owner,
+              repo: name,
+              path: entry.key,
+              message: 'Init: add ${entry.key}',
+              contentBase64: base64Encode(utf8.encode(entry.value)),
+            );
+          } catch (_) {}
+        }
+      }
+
       await _fetchRepos(force: true);
       await _fetchTree('', force: true);
       if (mounted) Navigator.pop(context);
@@ -289,15 +415,56 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
   void _showCreateSheet() {
     _nameCtrl.clear();
     _descCtrl.clear();
+    _selectedTemplate = 'none';
     _showSheet(title: '新建仓库', children: [
       MxTextField(controller: _nameCtrl, hint: '仓库名称', prefix: const Icon(Icons.folder_rounded, size: 17)),
       const SizedBox(height: 8),
       MxTextField(controller: _descCtrl, hint: '描述（可选）', prefix: const Icon(Icons.notes_rounded, size: 17)),
       const SizedBox(height: 10),
-      StatefulBuilder(builder: (ctx, setSt) => Column(children: [
-_SwitchRow(label: '私有仓库', value: _private, onChanged: (v) => setSt(() => _private = v)),
-        _SwitchRow(label: '初始化 README', value: _autoInit, onChanged: (v) => setSt(() => _autoInit = v)),
-      ])),
+      StatefulBuilder(builder: (ctx, setSt) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _SwitchRow(label: '私有仓库', value: _private, onChanged: (v) => setSt(() => _private = v)),
+          const SizedBox(height: 10),
+          // 模板选择
+          Text('项目模板', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.6))),
+          const SizedBox(height: 6),
+          ..._templates.entries.map((e) {
+            final selected = _selectedTemplate == e.key;
+            final scheme = Theme.of(ctx).colorScheme;
+            final isDark = Theme.of(ctx).brightness == Brightness.dark;
+            return GestureDetector(
+              onTap: () => setSt(() => _selectedTemplate = e.key),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                margin: const EdgeInsets.only(bottom: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: selected
+                      ? scheme.primary.withOpacity(0.12)
+                      : (isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.03)),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: selected ? scheme.primary.withOpacity(0.5) : scheme.onSurface.withOpacity(0.10),
+                    width: selected ? 1.5 : 1,
+                  ),
+                ),
+                child: Row(children: [
+                  Icon(e.value['icon'] as IconData, size: 16,
+                      color: selected ? scheme.primary : scheme.onSurface.withOpacity(0.5)),
+                  const SizedBox(width: 10),
+                  Expanded(child: Text(e.value['label'] as String,
+                      style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
+                          color: selected ? scheme.primary : scheme.onSurface.withOpacity(0.8)))),
+                  if (selected) Icon(Icons.check_circle_rounded, size: 16, color: scheme.primary),
+                ]),
+              ),
+            );
+          }),
+        ],
+      )),
       const SizedBox(height: 12),
       MxButton(label: '创建仓库', icon: Icons.add_rounded, onPressed: _createRepo),
     ]);
@@ -324,8 +491,7 @@ _SwitchRow(label: '私有仓库', value: _private, onChanged: (v) => setSt(() =>
         final ok = await _confirmDelete(repo);
         if (ok) _deleteRepo();
       }),
-      const SizedBox(height: 8),
-      Text('删除仓库不可恢复，需要 GitHub Token 拥有 delete_repo 权限。', style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.55))),
+      
     ]);
   }
 
@@ -344,28 +510,55 @@ _SwitchRow(label: '私有仓库', value: _private, onChanged: (v) => setSt(() =>
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withOpacity(0.45),
       builder: (ctx) {
         final isDark = Theme.of(ctx).brightness == Brightness.dark;
         final scheme = Theme.of(ctx).colorScheme;
         return Padding(
           padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
           child: Container(
-            margin: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-            padding: const EdgeInsets.fromLTRB(18, 14, 18, 20),
+            margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+            padding: const EdgeInsets.fromLTRB(18, 14, 18, 24),
             decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF0A1C2C) : Colors.white,
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.06)),
-              boxShadow: [BoxShadow(color: const Color(0xFF3B8FC7).withOpacity(0.16), blurRadius: 28, offset: const Offset(0, -6))],
+              color: isDark
+                  ? const Color(0xFF1A2E3E).withOpacity(0.94)
+                  : Colors.white.withOpacity(0.90),
+              borderRadius: BorderRadius.circular(26),
+              border: Border.all(
+                color: isDark
+                    ? Colors.white.withOpacity(0.10)
+                    : Colors.white.withOpacity(0.75),
+                width: 0.8,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(isDark ? 0.50 : 0.14),
+                  blurRadius: 40,
+                  spreadRadius: -4,
+                  offset: const Offset(0, -8),
+                ),
+                BoxShadow(
+                  color: scheme.primary.withOpacity(0.08),
+                  blurRadius: 20,
+                  offset: const Offset(0, -4),
+                ),
+              ],
             ),
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Center(child: Container(width: 34, height: 4, margin: const EdgeInsets.only(bottom: 14), decoration: BoxDecoration(color: scheme.onSurface.withOpacity(0.16), borderRadius: BorderRadius.circular(2)))),
-                  Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
-                  const SizedBox(height: 14),
+                  Center(child: Container(
+                    width: 36, height: 4,
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      color: scheme.onSurface.withOpacity(0.18),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  )),
+                  Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 16),
                   ...children,
                 ],
               ),
@@ -400,11 +593,11 @@ _SwitchRow(label: '私有仓库', value: _private, onChanged: (v) => setSt(() =>
           padding: const EdgeInsets.fromLTRB(10, 8, 10, 2),
           child: MxCard(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PackageEditorScreen())),
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ProjectIdentityScreen())),
             child: Row(children: [
-              Icon(Icons.apps_rounded, size: 16, color: scheme.primary),
+              Icon(Icons.tune_rounded, size: 16, color: scheme.primary),
               const SizedBox(width: 8),
-              const Expanded(child: Text('安装包编辑 / 编译模板', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800))),
+              const Expanded(child: Text('项目配置', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800))),
               Icon(Icons.chevron_right_rounded, size: 16, color: scheme.onSurface.withOpacity(0.35)),
             ]),
           ),

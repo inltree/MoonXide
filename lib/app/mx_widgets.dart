@@ -523,7 +523,7 @@ class MxSwitch extends StatelessWidget {
   }
 }
 
-// ─── 自定义对话框 ─────────────────────────────────────────────────────────────
+// ─── 自定义对话框（iOS 磨砂毛玻璃风格） ──────────────────────────────────────
 class MxDialog extends StatelessWidget {
   const MxDialog({
     super.key,
@@ -552,6 +552,7 @@ class MxDialog extends StatelessWidget {
   }) async {
     final res = await showDialog<bool>(
       context: context,
+      barrierColor: Colors.black.withOpacity(0.45),
       builder: (_) => MxDialog(
         title: title, content: content,
         confirmLabel: confirmLabel, cancelLabel: cancelLabel,
@@ -567,30 +568,146 @@ class MxDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final confirmC = confirmColor ?? scheme.primary;
+
     return Dialog(
       backgroundColor: Colors.transparent,
-      child: Container(
-        padding: const EdgeInsets.all(22),
-        decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF0A1C2C) : Colors.white,
-          borderRadius: BorderRadius.circular(22),
-          border: Border.all(color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.06)),
-          boxShadow: [BoxShadow(color: scheme.primary.withOpacity(0.14), blurRadius: 28, offset: const Offset(0, 8))],
+      insetPadding: const EdgeInsets.symmetric(horizontal: 40),
+      child: _MxPressable(
+        child: Container(
+          decoration: BoxDecoration(
+            // 静态磨砂：深色半透明 + 高斯模糊感通过多层叠加模拟
+            color: isDark
+                ? const Color(0xFF1A2E3E).withOpacity(0.92)
+                : Colors.white.withOpacity(0.88),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isDark
+                  ? Colors.white.withOpacity(0.12)
+                  : Colors.white.withOpacity(0.80),
+              width: 0.8,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(isDark ? 0.55 : 0.18),
+                blurRadius: 40,
+                spreadRadius: -4,
+                offset: const Offset(0, 12),
+              ),
+              BoxShadow(
+                color: scheme.primary.withOpacity(0.08),
+                blurRadius: 20,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // 标题 + 内容区
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 22, 20, 16),
+                child: Column(
+                  children: [
+                    Text(title,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 8),
+                    Text(content,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            fontSize: 13,
+                            height: 1.5,
+                            color: scheme.onSurface.withOpacity(0.65))),
+                  ],
+                ),
+              ),
+              // iOS 风格分割线
+              Divider(height: 0.5, thickness: 0.5,
+                  color: scheme.onSurface.withOpacity(0.15)),
+              // 按钮行
+              IntrinsicHeight(
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _DialogBtn(
+                        label: cancelLabel,
+                        color: scheme.onSurface.withOpacity(0.55),
+                        onTap: onCancel ?? () => Navigator.pop(context, false),
+                        roundLeft: true,
+                      ),
+                    ),
+                    VerticalDivider(width: 0.5, thickness: 0.5,
+                        color: scheme.onSurface.withOpacity(0.15)),
+                    Expanded(
+                      child: _DialogBtn(
+                        label: confirmLabel,
+                        color: confirmC,
+                        bold: true,
+                        onTap: onConfirm ?? () => Navigator.pop(context, true),
+                        roundRight: true,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
-            const SizedBox(height: 10),
-            Text(content, style: TextStyle(fontSize: 14, color: scheme.onSurface.withOpacity(0.72))),
-            const SizedBox(height: 20),
-            Row(children: [
-              Expanded(child: MxButton(label: cancelLabel, onPressed: onCancel ?? () => Navigator.pop(context, false), filled: false)),
-              const SizedBox(width: 10),
-              Expanded(child: MxButton(label: confirmLabel, onPressed: onConfirm ?? () => Navigator.pop(context, true), color: confirmColor)),
-            ]),
-          ],
+      ),
+    );
+  }
+}
+
+class _DialogBtn extends StatefulWidget {
+  const _DialogBtn({
+    required this.label,
+    required this.color,
+    required this.onTap,
+    this.bold = false,
+    this.roundLeft = false,
+    this.roundRight = false,
+  });
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+  final bool bold;
+  final bool roundLeft;
+  final bool roundRight;
+
+  @override
+  State<_DialogBtn> createState() => _DialogBtnState();
+}
+
+class _DialogBtnState extends State<_DialogBtn> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final radius = BorderRadius.only(
+      bottomLeft:  widget.roundLeft  ? const Radius.circular(20) : Radius.zero,
+      bottomRight: widget.roundRight ? const Radius.circular(20) : Radius.zero,
+    );
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapUp: (_) { setState(() => _pressed = false); widget.onTap(); },
+      onTapCancel: () => setState(() => _pressed = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 80),
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          color: _pressed
+              ? (isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.05))
+              : Colors.transparent,
+          borderRadius: radius,
+        ),
+        child: Center(
+          child: Text(widget.label,
+              style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: widget.bold ? FontWeight.w700 : FontWeight.w400,
+                  color: widget.color)),
         ),
       ),
     );

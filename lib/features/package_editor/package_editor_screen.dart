@@ -88,8 +88,7 @@ class _PackageEditorScreenState extends State<PackageEditorScreen> {
                 child: Row(children: [Icon(Icons.check_circle_rounded, size: 14, color: scheme.primary), const SizedBox(width: 6), Expanded(child: Text('$e', style: const TextStyle(fontSize: 12)))]),
               )),
             ])),
-            const MxSectionLabel('说明'),
-            const MxCard(child: Text('模板仅用于生成编译配置预案；实际依赖、权限和工程文件修改由 AI 自动执行。')),
+            
           ],
         ),
       ),
