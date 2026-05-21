@@ -5,6 +5,60 @@ import '../../app/mx_widgets.dart';
 import '../../core/services/app_state.dart';
 import '../../core/services/build_center_state.dart';
 import '../../core/services/editor_state.dart';
+
+// ─── 错误波浪线 Painter ───────────────────────────────────────────────────────
+class _WavePainter extends CustomPainter {
+  _WavePainter({required this.text, required this.diagnostics, required this.baseStyle});
+  final String text;
+  final List<EditorDiagnostic> diagnostics;
+  final TextStyle baseStyle;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (diagnostics.isEmpty || text.isEmpty) return;
+    final lines = text.split('\n');
+    const lineH = 21.7; // 与行号栏行高一致
+    const padTop = 2.0;
+    const padLeft = 10.0;
+
+    for (final d in diagnostics) {
+      if (d.severity != 'error' && d.severity != 'warning') continue;
+      final color = d.severity == 'error' ? Colors.red : Colors.orange;
+      // 简单策略：在每行底部画波浪线（对有问题的行）
+      // 这里对所有行画，实际可按行号精确定位
+      for (var i = 0; i < lines.length; i++) {
+        final line = lines[i];
+        if (line.trim().isEmpty) continue;
+        // 只对包含问题关键词的行画波浪线
+        final hasIssue = d.message.contains('{') || d.message.contains('(') || d.message.contains('[');
+        if (!hasIssue) continue;
+        final y = padTop + (i + 1) * lineH - 2;
+        if (y > size.height) break;
+        final paint = Paint()
+          ..color = color.withOpacity(0.75)
+          ..strokeWidth = 1.2
+          ..style = PaintingStyle.stroke;
+        final path = Path();
+        const waveW = 4.0;
+        const waveH = 2.0;
+        final lineW = (line.length * 7.5).clamp(20.0, size.width - padLeft - 12);
+        path.moveTo(padLeft, y);
+        var x = padLeft;
+        var up = true;
+        while (x < padLeft + lineW) {
+          path.relativeQuadraticBezierTo(waveW / 2, up ? -waveH : waveH, waveW, 0);
+          x += waveW;
+          up = !up;
+        }
+        canvas.drawPath(path, paint);
+        break; // 每个诊断只画一行
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_WavePainter old) => old.text != text || old.diagnostics != diagnostics;
+}
 class EditorScreen extends StatefulWidget {
   const EditorScreen({super.key});
 
@@ -239,30 +293,49 @@ class EditorScreenState extends State<EditorScreen> {
                 ),
               ),
               
-              // 代码区
+              // 代码区（横向可滚动 + 错误波浪线 overlay）
               Expanded(
-child: TextField(
-                   controller: contentController,
-                   readOnly: editor.readOnly,
-                   scrollController: _editorScroll,
-                  expands: true,
-                  maxLines: null,
-                  minLines: null,
-                  keyboardType: TextInputType.multiline,
-                  textAlignVertical: TextAlignVertical.top,
-                  style: contentController.baseStyle,
-                  decoration: InputDecoration(
-                    filled: true,
-                    fillColor: editorBg,
-                    border: InputBorder.none,
-                    contentPadding:
-                        const EdgeInsets.fromLTRB(10, 2, 12, 12),
-                    hintText: null,
-                    hintStyle: TextStyle(
-                        color: editorText.withOpacity(0.3),
-                        fontFamily: 'monospace'),
-                  ),
-                  onChanged: editor.updateContent,
+                child: Stack(
+                  children: [
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: SizedBox(
+                        width: 1200, // 足够宽，允许长行横向滚动
+                        child: TextField(
+                          controller: contentController,
+                          readOnly: editor.readOnly,
+                          scrollController: _editorScroll,
+                          expands: true,
+                          maxLines: null,
+                          minLines: null,
+                          keyboardType: TextInputType.multiline,
+                          textAlignVertical: TextAlignVertical.top,
+                          style: contentController.baseStyle,
+                          decoration: InputDecoration(
+                            filled: true,
+                            fillColor: editorBg,
+                            border: InputBorder.none,
+                            contentPadding: const EdgeInsets.fromLTRB(10, 2, 12, 12),
+                            hintText: null,
+                          ),
+                          onChanged: editor.updateContent,
+                        ),
+                      ),
+                    ),
+                    // 错误波浪线 overlay
+                    if (diagnostics.isNotEmpty)
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: CustomPaint(
+                            painter: _WavePainter(
+                              text: contentController.text,
+                              diagnostics: diagnostics,
+                              baseStyle: contentController.baseStyle,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ],

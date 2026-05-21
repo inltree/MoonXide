@@ -108,6 +108,25 @@ class _SigningScreenState extends State<SigningScreen> {
             ),
 
             const MxSectionLabel('签名信息'),
+            // 快速填入默认调试签名
+            MxCard(
+              child: Row(children: [
+                Icon(Icons.info_outline_rounded, size: 16, color: Theme.of(context).colorScheme.primary),
+                const SizedBox(width: 10),
+                const Expanded(child: Text('使用 Android 默认调试签名', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700))),
+                MxButton(
+                  label: '填入',
+                  small: true,
+                  filled: false,
+                  onPressed: () => setState(() {
+                    _keystoreCtrl.text  = '\$HOME/.android/debug.keystore';
+                    _aliasCtrl.text     = 'androiddebugkey';
+                    _storePassCtrl.text = 'android';
+                    _keyPassCtrl.text   = 'android';
+                  }),
+                ),
+              ]),
+            ),
             MxTextField(
               controller: _aliasCtrl,
               hint: 'Key Alias（别名）',

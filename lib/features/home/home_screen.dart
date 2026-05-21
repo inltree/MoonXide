@@ -433,11 +433,13 @@ class _TopBar extends StatelessWidget {
             MxIconBtn(
               icon: Icons.undo_rounded,
               onPressed: editor.canUndo ? onUndoTap : null,
+              active: editor.canUndo,
               size: 32,
             ),
             MxIconBtn(
               icon: Icons.redo_rounded,
               onPressed: editor.canRedo ? onRedoTap : null,
+              active: editor.canRedo,
               size: 32,
             ),
             MxIconBtn(

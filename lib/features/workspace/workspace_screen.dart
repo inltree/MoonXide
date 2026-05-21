@@ -16,6 +16,7 @@ class _TreeNode {
   final String? downloadUrl;
   bool expanded;
   bool loading;
+  bool selected;
   List<_TreeNode> children;
 
   _TreeNode({
@@ -26,6 +27,7 @@ class _TreeNode {
     this.downloadUrl,
     this.expanded = false,
     this.loading = false,
+    this.selected = false,
     this.children = const [],
   });
 }
@@ -49,6 +51,8 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
   String? _loadedRepoKey = _cachedRepoKey;
   bool _loadingRepos = false;
   bool _loadingTree = false;
+  String? _openingPath;   // 正在加载的文件路径
+  String? _selectedPath;  // 当前选中文件路径
   String? _error;
 
   final _nameCtrl = TextEditingController();
@@ -66,6 +70,41 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     'android_java': {'label': 'Android Java 应用', 'icon': Icons.local_cafe_rounded},
     'cpp_native': {'label': 'C/C++ 原生可执行', 'icon': Icons.memory_rounded},
   };
+
+  // GitHub Actions 工作流模板
+  String _githubActionsWorkflow(String repoName) => '''
+name: Build APK
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type'
+        required: false
+        default: 'debug'
+        type: choice
+        options: [debug, release]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.x'
+          channel: stable
+      - run: flutter pub get
+      - run: flutter build apk --\${{ github.event.inputs.build_type || 'debug' }} --no-tree-shake-icons
+      - uses: actions/upload-artifact@v4
+        with:
+          name: $repoName-apk
+          path: build/app/outputs/flutter-apk/*.apk
+''';
 
   // 模板文件内容
   Map<String, String> _templateFiles(String tpl, String repoName) {
@@ -286,6 +325,7 @@ add_executable(\${PROJECT_NAME} main.cpp)
     final owner = widget.state.selectedOwner;
     final repo = widget.state.selectedRepo;
     if (owner == null || repo == null || widget.state.github == null || node.isDir) return;
+    setState(() { _openingPath = node.path; _selectedPath = node.path; });
     try {
       final name = node.name.toLowerCase();
       final binaryExt = ['png','jpg','jpeg','webp','gif','pdf','zip','apk','jar','so','a','dex','exe','bin','keystore','jks'];
@@ -293,6 +333,7 @@ add_executable(\${PROJECT_NAME} main.cpp)
       if (binaryExt.contains(ext)) {
         if (!mounted) return;
         context.read<EditorState>().openFile(node.path, '二进制/资源文件无法在文本编辑器中直接编辑。\n\n文件：${node.path}\n类型：$ext', readOnlyFile: true, reason: '二进制文件');
+        setState(() => _openingPath = null);
         return;
       }
       final file = await widget.state.github!.getFile(owner, repo, node.path);
@@ -303,7 +344,7 @@ add_executable(\${PROJECT_NAME} main.cpp)
       if (size > 512 * 1024 || content.length > 600000) {
         context.read<EditorState>().openFile(
           node.path,
-          '${content.substring(0, content.length > 120000 ? 120000 : content.length)}\n\n/* 大文件已分页截断预览，仅展示前 120KB，避免移动端渲染卡顿。请使用 AI 或下载后处理完整文件。 */',
+          '${content.substring(0, content.length > 120000 ? 120000 : content.length)}\n\n/* 大文件已截断预览，仅展示前 120KB */',
           readOnlyFile: true,
           reason: '大文件预览模式',
         );
@@ -313,6 +354,7 @@ add_executable(\${PROJECT_NAME} main.cpp)
     } catch (e) {
       setState(() => _error = '打开失败：$e');
     }
+    if (mounted) setState(() => _openingPath = null);
   }
 
   Future<void> _upload() async {
@@ -338,10 +380,21 @@ add_executable(\${PROJECT_NAME} main.cpp)
   }
 
   Future<void> _createRepo() async {
-    if (_nameCtrl.text.trim().isEmpty || widget.state.github == null) return;
+    final repoName = _nameCtrl.text.trim();
+    if (repoName.isEmpty || widget.state.github == null) return;
+    // GitHub 仓库名规则：只允许字母、数字、连字符、下划线、点
+    final nameReg = RegExp(r'^[a-zA-Z0-9._-]+$');
+    if (!nameReg.hasMatch(repoName)) {
+      setState(() => _error = '仓库名只能包含字母、数字、连字符(-)、下划线(_)、点(.)，不支持中文或空格');
+      return;
+    }
+    if (repoName.length > 100) {
+      setState(() => _error = '仓库名不能超过 100 个字符');
+      return;
+    }
     setState(() { _loadingRepos = true; _error = null; });
     try {
-      final repoName = _nameCtrl.text.trim();
+      setState(() => _error = '正在创建仓库…');
       final r = await widget.state.github!.createRepository(
         name: repoName,
         private: _private,
@@ -357,7 +410,10 @@ add_executable(\${PROJECT_NAME} main.cpp)
       // 推送模板文件
       if (_selectedTemplate != 'none') {
         final files = _templateFiles(_selectedTemplate, repoName);
+        var pushed = 0;
         for (final entry in files.entries) {
+          pushed++;
+          if (mounted) setState(() => _error = '推送模板 $pushed/${files.length}：${entry.key}');
           try {
             await widget.state.github!.putFile(
               owner: owner,
@@ -368,6 +424,18 @@ add_executable(\${PROJECT_NAME} main.cpp)
             );
           } catch (_) {}
         }
+        // 推送 GitHub Actions workflow
+        if (mounted) setState(() => _error = '推送 CI/CD 工作流…');
+        try {
+          final wf = _githubActionsWorkflow(name);
+          await widget.state.github!.putFile(
+            owner: owner,
+            repo: name,
+            path: '.github/workflows/build.yml',
+            message: 'Init: add GitHub Actions workflow',
+            contentBase64: base64Encode(utf8.encode(wf)),
+          );
+        } catch (_) {}
       }
 
       await _fetchRepos(force: true);
@@ -407,6 +475,114 @@ add_executable(\${PROJECT_NAME} main.cpp)
       _treeCache.clear();
       await _fetchRepos(force: true);
       if (mounted) Navigator.pop(context);
+    } catch (e) {
+      setState(() => _error = '删除失败：$e');
+    }
+  }
+
+  void _showFileMenu(_TreeNode node) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final renameCtrl = TextEditingController(text: node.name);
+    _showSheet(title: node.isDir ? '文件夹操作' : '文件操作', children: [
+      // 文件名预览
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: scheme.primary.withOpacity(0.07),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(children: [
+          Icon(node.isDir ? Icons.folder_rounded : Icons.insert_drive_file_rounded,
+              size: 15, color: scheme.primary),
+          const SizedBox(width: 8),
+          Expanded(child: Text(node.path, style: TextStyle(fontSize: 12, color: scheme.onSurface.withOpacity(0.7)), maxLines: 2, overflow: TextOverflow.ellipsis)),
+        ]),
+      ),
+      const SizedBox(height: 12),
+      // 复制路径
+      MxButton(
+        label: '复制路径',
+        icon: Icons.copy_rounded,
+        filled: false,
+        onPressed: () async {
+          await Clipboard.setData(ClipboardData(text: node.path));
+          if (mounted) {
+            Navigator.pop(context);
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已复制路径'), duration: Duration(seconds: 1)));
+          }
+        },
+      ),
+      const SizedBox(height: 8),
+      // 重命名（仅文件）
+      if (!node.isDir) ...[
+        MxTextField(controller: renameCtrl, hint: '新文件名', prefix: const Icon(Icons.drive_file_rename_outline_rounded, size: 17)),
+        const SizedBox(height: 8),
+        MxButton(
+          label: '重命名并推送',
+          icon: Icons.edit_rounded,
+          onPressed: () async {
+            final newName = renameCtrl.text.trim();
+            if (newName.isEmpty || newName == node.name) { Navigator.pop(context); return; }
+            Navigator.pop(context);
+            await _renameFile(node, newName);
+          },
+        ),
+        const SizedBox(height: 8),
+      ],
+      // 删除
+      MxButton(
+        label: '删除文件',
+        icon: Icons.delete_forever_rounded,
+        color: Colors.red,
+        onPressed: () async {
+          Navigator.pop(context);
+          final ok = await MxDialog.show(context,
+            title: '确认删除？',
+            content: '将删除 ${node.name}，此操作不可恢复。',
+            confirmLabel: '删除',
+            cancelLabel: '取消',
+            confirmColor: Colors.red,
+          );
+          if (ok) await _deleteFile(node);
+        },
+      ),
+    ]);
+  }
+
+  Future<void> _renameFile(_TreeNode node, String newName) async {
+    final owner = widget.state.selectedOwner;
+    final repo = widget.state.selectedRepo;
+    if (owner == null || repo == null || widget.state.github == null) return;
+    try {
+      // GitHub 没有直接重命名 API，需要读取内容 → 新路径写入 → 删除旧路径
+      final file = await widget.state.github!.getFile(owner, repo, node.path);
+      final sha = file['sha'] as String?;
+      final raw = (file['content'] as String).replaceAll('\n', '');
+      final dir = node.path.contains('/') ? node.path.substring(0, node.path.lastIndexOf('/') + 1) : '';
+      final newPath = '$dir$newName';
+      await widget.state.github!.putFile(
+        owner: owner, repo: repo, path: newPath,
+        message: 'Rename ${node.name} to $newName',
+        contentBase64: raw,
+      );
+      // 删除旧文件
+      await widget.state.github!.deleteFile(owner: owner, repo: repo, path: node.path, sha: sha ?? '', message: 'Remove ${node.name} after rename');
+      await _fetchTree('', force: true);
+    } catch (e) {
+      setState(() => _error = '重命名失败：$e');
+    }
+  }
+
+  Future<void> _deleteFile(_TreeNode node) async {
+    final owner = widget.state.selectedOwner;
+    final repo = widget.state.selectedRepo;
+    if (owner == null || repo == null || widget.state.github == null) return;
+    try {
+      final file = await widget.state.github!.getFile(owner, repo, node.path);
+      final sha = file['sha'] as String?;
+      await widget.state.github!.deleteFile(owner: owner, repo: repo, path: node.path, sha: sha ?? '', message: 'Delete ${node.name}');
+      await _fetchTree('', force: true);
     } catch (e) {
       setState(() => _error = '删除失败：$e');
     }
@@ -616,14 +792,17 @@ add_executable(\${PROJECT_NAME} main.cpp)
                   : ListView.builder(
                       padding: const EdgeInsets.only(bottom: 24),
                       itemCount: _roots.length,
-                      itemBuilder: (_, i) => _TreeTile(
-                        node: _roots[i],
-                        depth: 0,
-                        onToggle: _toggleDir,
-                        onOpen: _openFile,
-                        scheme: scheme,
-                        isDark: isDark,
-                      ),
+itemBuilder: (_, i) => _TreeTile(
+                         node: _roots[i],
+                         depth: 0,
+                         onToggle: _toggleDir,
+                         onOpen: _openFile,
+                         scheme: scheme,
+                         isDark: isDark,
+                         selectedPath: _selectedPath,
+                         openingPath: _openingPath,
+                         onLongPress: _showFileMenu,
+                       ),
                     ),
         ),
       ],
@@ -787,16 +966,25 @@ class _SwitchRow extends StatelessWidget {
   ]);
 }
 
-class _TreeTile extends StatelessWidget {
-  const _TreeTile({required this.node, required this.depth, required this.onToggle, required this.onOpen, required this.scheme, required this.isDark});
+class _TreeTile extends StatefulWidget {
+  const _TreeTile({required this.node, required this.depth, required this.onToggle, required this.onOpen, required this.scheme, required this.isDark, required this.selectedPath, required this.openingPath, required this.onLongPress});
   final _TreeNode node;
   final int depth;
   final Future<void> Function(_TreeNode) onToggle;
   final Future<void> Function(_TreeNode) onOpen;
   final ColorScheme scheme;
   final bool isDark;
+  final String? selectedPath;
+  final String? openingPath;
+  final void Function(_TreeNode) onLongPress;
 
+  @override
+  State<_TreeTile> createState() => _TreeTileState();
+}
+
+class _TreeTileState extends State<_TreeTile> {
   IconData _icon() {
+    final node = widget.node;
     if (node.isDir) return node.expanded ? Icons.folder_open_rounded : Icons.folder_rounded;
     final lower = node.name.toLowerCase();
     if (lower == 'package.json') return Icons.inventory_2_rounded;
@@ -828,6 +1016,7 @@ class _TreeTile extends StatelessWidget {
   }
 
   Color _iconColor() {
+    final node = widget.node;
     if (node.isDir) return const Color(0xFFF5A623);
     final lower = node.name.toLowerCase();
     if (lower == 'package.json') return const Color(0xFFCB3837);
@@ -849,35 +1038,76 @@ class _TreeTile extends StatelessWidget {
       case 'json': case 'yaml': case 'yml': return const Color(0xFF6DB33F);
       case 'md': return const Color(0xFF519ABA);
       case 'sh': case 'bash': return const Color(0xFF4EAA25);
-      default: return scheme.onSurface.withOpacity(0.50);
+      default: return widget.scheme.onSurface.withOpacity(0.50);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final node = widget.node;
+    final scheme = widget.scheme;
+    final isDark = widget.isDark;
     const rowH = 30.0;
-    final indent = 10.0 + depth * 15.0;
+    final indent = 10.0 + widget.depth * 15.0;
+    final isSelected = widget.selectedPath == node.path;
+    final isOpening  = widget.openingPath  == node.path;
+
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      InkWell(
-        onTap: () => node.isDir ? onToggle(node) : onOpen(node),
-        child: SizedBox(
-          height: rowH,
-          child: Row(children: [
-            SizedBox(width: indent),
-            SizedBox(width: 16, child: node.isDir
-              ? node.loading
-                ? const SizedBox(width: 10, height: 10, child: CircularProgressIndicator(strokeWidth: 1.5))
-                : Icon(node.expanded ? Icons.arrow_drop_down_rounded : Icons.arrow_right_rounded, size: 16, color: scheme.onSurface.withOpacity(0.45))
-              : null),
-            const SizedBox(width: 2),
-            Icon(_icon(), size: 15, color: _iconColor()),
-            const SizedBox(width: 6),
-            Expanded(child: Text(node.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, fontWeight: node.isDir ? FontWeight.w600 : FontWeight.w400, color: scheme.onSurface.withOpacity(0.85)))),
-          ]),
+      AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? scheme.primary.withOpacity(isDark ? 0.18 : 0.12)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          boxShadow: isSelected
+              ? [BoxShadow(color: scheme.primary.withOpacity(0.18), blurRadius: 8, offset: const Offset(0, 2))]
+              : null,
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: () => node.isDir ? widget.onToggle(node) : widget.onOpen(node),
+          onLongPress: () => widget.onLongPress(node),
+          child: SizedBox(
+            height: rowH,
+            child: Row(children: [
+              SizedBox(width: indent),
+              SizedBox(width: 16, child: node.isDir
+                ? node.loading
+                  ? SizedBox(
+                      width: 12, height: 12,
+                      child: CircularProgressIndicator(strokeWidth: 1.5, color: scheme.primary),
+                    )
+                  : Icon(node.expanded ? Icons.arrow_drop_down_rounded : Icons.arrow_right_rounded, size: 16, color: scheme.onSurface.withOpacity(0.45))
+                : isOpening
+                  ? SizedBox(
+                      width: 12, height: 12,
+                      child: CircularProgressIndicator(strokeWidth: 1.5, color: scheme.primary),
+                    )
+                  : null),
+              const SizedBox(width: 2),
+              Icon(_icon(), size: 15, color: _iconColor()),
+              const SizedBox(width: 6),
+              Expanded(child: Text(node.name, maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 13,
+                      fontWeight: node.isDir ? FontWeight.w600 : FontWeight.w400,
+                      color: isSelected
+                          ? scheme.primary
+                          : scheme.onSurface.withOpacity(0.85)))),
+            ]),
+          ),
         ),
       ),
       if (node.isDir && node.expanded)
-        ...node.children.map((child) => _TreeTile(node: child, depth: depth + 1, onToggle: onToggle, onOpen: onOpen, scheme: scheme, isDark: isDark)),
+        ...node.children.map((child) => _TreeTile(
+          node: child, depth: widget.depth + 1,
+          onToggle: widget.onToggle, onOpen: widget.onOpen,
+          scheme: scheme, isDark: isDark,
+          selectedPath: widget.selectedPath,
+          openingPath: widget.openingPath,
+          onLongPress: widget.onLongPress,
+        )),
     ]);
   }
 }
