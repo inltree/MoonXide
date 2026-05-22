@@ -75,8 +75,12 @@ class MxCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final base   = color ?? (isDark ? const Color(0xFF0F2230) : Colors.white);
+    final isDark  = Theme.of(context).brightness == Brightness.dark;
+    final scheme  = Theme.of(context).colorScheme;
+    final base    = color ?? (isDark ? const Color(0xFF0F2230) : Colors.white);
+    final borderC = isDark
+        ? Colors.white.withOpacity(0.08)
+        : scheme.primary.withOpacity(0.10);
     final card = Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Material(
@@ -85,16 +89,12 @@ class MxCard extends StatelessWidget {
         child: InkWell(
           borderRadius: BorderRadius.circular(radius),
           onTap: onTap,
-          splashColor: Theme.of(context).colorScheme.primary.withOpacity(0.07),
+          splashColor: scheme.primary.withOpacity(0.07),
           child: Container(
             padding: padding ?? const EdgeInsets.all(14),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(radius),
-              border: Border.all(
-                color: isDark
-                    ? Colors.white.withOpacity(0.07)
-                    : Colors.white.withOpacity(0.55),
-              ),
+              border: Border.all(color: borderC),
             ),
             child: child,
           ),

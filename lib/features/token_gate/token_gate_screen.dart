@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -7,18 +8,33 @@ import '../../core/services/app_state.dart';
 
 class TokenGateScreen extends StatefulWidget {
   const TokenGateScreen({super.key});
-
   @override
   State<TokenGateScreen> createState() => _TokenGateScreenState();
 }
 
-class _TokenGateScreenState extends State<TokenGateScreen> {
+class _TokenGateScreenState extends State<TokenGateScreen>
+    with TickerProviderStateMixin {
   final _ctrl = TextEditingController();
   bool _obscure = true;
+  late final AnimationController _particleCtrl;
+  late final AnimationController _fadeCtrl;
+  late final Animation<double> _fadeIn;
+
+  @override
+  void initState() {
+    super.initState();
+    _particleCtrl = AnimationController(vsync: this, duration: const Duration(seconds: 12))
+      ..repeat();
+    _fadeCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 700));
+    _fadeIn = CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOutCubic);
+    _fadeCtrl.forward();
+  }
 
   @override
   void dispose() {
     _ctrl.dispose();
+    _particleCtrl.dispose();
+    _fadeCtrl.dispose();
     super.dispose();
   }
 
@@ -46,178 +62,135 @@ class _TokenGateScreenState extends State<TokenGateScreen> {
     }
 
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF071722) : MoonXideTheme.snow,
-      body: Stack(
-        children: [
-          // ── 背景光斑 ──────────────────────────────────────────────────────
-          Positioned(
-            top: -120, right: -80,
-            child: _Blob(size: 300,
-                color: const Color(0xFF9CD8FF).withOpacity(isDark ? 0.14 : 0.32)),
+      backgroundColor: isDark ? const Color(0xFF040E18) : MoonXideTheme.snow,
+      body: Stack(children: [
+        // ── 粒子背景 ──────────────────────────────────────────────────────────
+        AnimatedBuilder(
+          animation: _particleCtrl,
+          builder: (_, __) => CustomPaint(
+            size: MediaQuery.of(context).size,
+            painter: _ParticlePainter(
+              progress: _particleCtrl.value,
+              isDark: isDark,
+              primary: scheme.primary,
+            ),
           ),
-          Positioned(
-            bottom: -60, left: -100,
-            child: _Blob(size: 260,
-                color: const Color(0xFFD9F2FF).withOpacity(isDark ? 0.08 : 0.40)),
-          ),
-          Positioned(
-            top: 200, left: -60,
-            child: _Blob(size: 180,
-                color: const Color(0xFFB8E8FF).withOpacity(isDark ? 0.06 : 0.22)),
-          ),
+        ),
 
-          // ── 内容 ──────────────────────────────────────────────────────────
-          SafeArea(
-            child: Padding(
+        // ── 渐变遮罩 ──────────────────────────────────────────────────────────
+        Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: isDark
+                  ? [const Color(0xFF040E18).withOpacity(0.0), const Color(0xFF040E18).withOpacity(0.85)]
+                  : [MoonXideTheme.snow.withOpacity(0.0), MoonXideTheme.snow.withOpacity(0.80)],
+            ),
+          ),
+        ),
+
+        // ── 内容 ──────────────────────────────────────────────────────────────
+        SafeArea(
+          child: FadeTransition(
+            opacity: _fadeIn,
+            child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const SizedBox(height: 52),
+                  const SizedBox(height: 56),
 
-                  // Logo
-          // ── Logo ──────────────────────────────────────────────────────────
-          Row(
-                    children: [
+                  // ── Logo 区 ──────────────────────────────────────────────
+                  Center(
+                    child: Column(children: [
                       Container(
-                        width: 58, height: 58,
+                        width: 72, height: 72,
                         decoration: BoxDecoration(
-                          color: scheme.primary.withOpacity(0.13),
-                          borderRadius: BorderRadius.circular(18),
-                          border: Border.all(
-                              color: isDark
-                                  ? Colors.white.withOpacity(0.12)
-                                  : Colors.white.withOpacity(0.75),
-                              width: 1.5),
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [scheme.primary, scheme.primary.withOpacity(0.55)],
+                          ),
+                          borderRadius: BorderRadius.circular(22),
+                          boxShadow: [
+                            BoxShadow(color: scheme.primary.withOpacity(0.40), blurRadius: 28, offset: const Offset(0, 8)),
+                          ],
                         ),
-                        child: Icon(Icons.terrain_rounded,
-                            color: scheme.primary, size: 28),
+                        child: const Icon(Icons.terrain_rounded, color: Colors.white, size: 34),
                       ),
-                      const SizedBox(width: 14),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('MoonXide',
-                              style: TextStyle(
-                                fontSize: 28,
-                                fontWeight: FontWeight.w900,
-                                color: isDark
-                                    ? const Color(0xFFE9F8FF)
-                                    : MoonXideTheme.deepBlue,
-                              )),
-                          Text('Snow Alpine IDE',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: scheme.onSurface.withOpacity(0.48),
-                              )),
-                        ],
-                      ),
-                    ],
+                      const SizedBox(height: 16),
+                      Text('MoonXide', style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900, letterSpacing: -0.5, color: isDark ? const Color(0xFFE9F8FF) : MoonXideTheme.deepBlue)),
+                      const SizedBox(height: 4),
+                      Text('Snow Alpine IDE', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, letterSpacing: 2.0, color: scheme.onSurface.withOpacity(0.40))),
+                    ]),
                   ),
 
-                  const SizedBox(height: 40),
+                  const SizedBox(height: 44),
 
-                  Text('连接 GitHub',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w900,
-                        color: isDark ? const Color(0xFFE9F8FF) : MoonXideTheme.deepBlue,
-                      )),
-                  const SizedBox(height: 6),
-                  Text(
-                    '需要 GitHub Personal Access Token 才能管理仓库、触发编译和发布版本。',
-                    style: TextStyle(
-                        fontSize: 14, color: scheme.onSurface.withOpacity(0.58)),
-                  ),
+                  // ── 标题 ──────────────────────────────────────────────────
+                  Text('连接 GitHub', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: isDark ? const Color(0xFFE9F8FF) : MoonXideTheme.deepBlue)),
+                  const SizedBox(height: 8),
+                  Text('MoonXide 通过 GitHub Personal Access Token 直接操作你的仓库、触发云端编译和发布版本，Token 仅存储在本地设备，不会上传到任何服务器。', style: TextStyle(fontSize: 13, height: 1.6, color: scheme.onSurface.withOpacity(0.55))),
 
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 24),
 
-                  // Token 输入卡片
-                  MxGlass(
-                    padding: const EdgeInsets.all(18),
-                    radius: 22,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        MxTextField(
-                          controller: _ctrl,
-                          hint: 'ghp_xxxxxxxxxxxx',
-                          label: 'GitHub Token',
-                          obscure: _obscure,
-                          prefix: const Icon(Icons.key_rounded, size: 18),
-                          suffix: MxIconBtn(
-                            icon: _obscure
-                                ? Icons.visibility_off_rounded
-                                : Icons.visibility_rounded,
+                  // ── 权限说明卡片 ──────────────────────────────────────────
+                  _PermCard(isDark: isDark, scheme: scheme),
+
+                  const SizedBox(height: 20),
+
+                  // ── Token 输入卡片 ────────────────────────────────────────
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: (isDark ? const Color(0xFF0A1929) : Colors.white).withOpacity(isDark ? 0.88 : 0.92),
+                      borderRadius: BorderRadius.circular(22),
+                      border: Border.all(color: isDark ? Colors.white.withOpacity(0.09) : scheme.primary.withOpacity(0.14)),
+                      boxShadow: [BoxShadow(color: scheme.primary.withOpacity(isDark ? 0.12 : 0.08), blurRadius: 32, offset: const Offset(0, 8))],
+                    ),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                      Row(children: [
+                        Icon(Icons.key_rounded, size: 16, color: scheme.primary),
+                        const SizedBox(width: 8),
+                        Text('Personal Access Token', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: scheme.primary)),
+                      ]),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _ctrl,
+                        obscureText: _obscure,
+                        style: TextStyle(fontFamily: 'monospace', fontSize: 14, color: scheme.onSurface),
+                        decoration: InputDecoration(
+                          hintText: 'ghp_xxxxxxxxxxxxxxxxxxxx',
+                          hintStyle: TextStyle(color: scheme.onSurface.withOpacity(0.30), fontFamily: 'monospace'),
+                          filled: true,
+                          fillColor: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.03),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: scheme.primary.withOpacity(0.18))),
+                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: scheme.primary.withOpacity(0.18))),
+                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: scheme.primary.withOpacity(0.60), width: 1.5)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+                          suffixIcon: IconButton(
+                            icon: Icon(_obscure ? Icons.visibility_off_rounded : Icons.visibility_rounded, size: 18, color: scheme.onSurface.withOpacity(0.45)),
                             onPressed: () => setState(() => _obscure = !_obscure),
-                            size: 36,
                           ),
                         ),
-                        const SizedBox(height: 10),
-                        Text(
-                          'repo · workflow · read:user · write:packages · delete_repo',
-                          style: TextStyle(
-                              fontSize: 11,
-                              color: scheme.onSurface.withOpacity(0.42)),
-                        ),
-                      ],
-                    ),
+                      ),
+                      const SizedBox(height: 10),
+                      Text('repo · workflow · read:user · write:packages · delete_repo', style: TextStyle(fontSize: 11, color: scheme.onSurface.withOpacity(0.38), fontFamily: 'monospace')),
+                    ]),
                   ),
 
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 12),
 
-                  // 状态反馈
+                  // ── 状态反馈 ──────────────────────────────────────────────
                   if (state.tokenStatus != null)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 6),
-                      child: Row(
-                        children: [
-                          Icon(
-                            state.tokenValidated
-                                ? Icons.check_circle_rounded
-                                : Icons.info_rounded,
-                            size: 15,
-                            color: state.tokenValidated ? Colors.green : scheme.primary,
-                          ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              state.tokenStatus!,
-                              style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13,
-                                color: state.tokenValidated
-                                    ? Colors.green
-                                    : scheme.primary,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                    _StatusRow(text: state.tokenStatus!, ok: state.tokenValidated, scheme: scheme),
                   if (state.error != null)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 6),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.error_rounded,
-                              size: 15, color: Colors.red),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(state.error!,
-                                style: const TextStyle(
-                                    color: Colors.red,
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 13)),
-                          ),
-                        ],
-                      ),
-                    ),
+                    _StatusRow(text: state.error!, ok: false, scheme: scheme, isError: true),
 
-                  const Spacer(),
+                  const SizedBox(height: 20),
 
-                  // 操作按钮
+                  // ── 操作按钮 ──────────────────────────────────────────────
                   MxButton(
                     label: '前往 GitHub 创建令牌',
                     icon: Icons.open_in_new_rounded,
@@ -228,37 +201,117 @@ class _TokenGateScreenState extends State<TokenGateScreen> {
                   MxButton(
                     label: state.loading ? '验证中…' : '验证并进入 MoonXide',
                     icon: state.loading ? Icons.hourglass_top_rounded : Icons.login_rounded,
-                    onPressed: state.loading
-                        ? null
-                        : () async {
-                            final ok =
-                                await context.read<AppState>().acceptToken(_ctrl.text);
-                            if (ok && mounted) {
-                              Navigator.of(context).pushReplacementNamed('/home');
-                            }
-                          },
+                    onPressed: state.loading ? null : () => context.read<AppState>().acceptToken(_ctrl.text),
                   ),
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 36),
                 ],
               ),
             ),
           ),
-        ],
-      ),
+        ),
+      ]),
     );
   }
 }
 
-class _Blob extends StatelessWidget {
-  const _Blob({required this.size, required this.color});
-  final double size;
-  final Color color;
+// ─── 权限说明卡片 ─────────────────────────────────────────────────────────────
+class _PermCard extends StatelessWidget {
+  const _PermCard({required this.isDark, required this.scheme});
+  final bool isDark;
+  final ColorScheme scheme;
+
+  static const _perms = [
+    (Icons.folder_rounded,       'repo',             '读写仓库文件、提交代码'),
+    (Icons.play_circle_rounded,  'workflow',         '触发 GitHub Actions 云编译'),
+    (Icons.person_rounded,       'read:user',        '读取账号信息和头像'),
+    (Icons.inventory_2_rounded,  'write:packages',   '发布 Release 产物'),
+    (Icons.delete_forever_rounded,'delete_repo',     '删除仓库（可选操作）'),
+  ];
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: size, height: size,
-      decoration: BoxDecoration(shape: BoxShape.circle, color: color),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: scheme.primary.withOpacity(isDark ? 0.08 : 0.05),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: scheme.primary.withOpacity(0.16)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(Icons.shield_rounded, size: 15, color: scheme.primary),
+          const SizedBox(width: 7),
+          Text('所需权限说明', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: scheme.primary)),
+        ]),
+        const SizedBox(height: 12),
+        ..._perms.map((p) => Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Row(children: [
+            Icon(p.$1, size: 14, color: scheme.primary.withOpacity(0.70)),
+            const SizedBox(width: 8),
+            Text(p.$2, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, fontFamily: 'monospace', color: scheme.onSurface.withOpacity(0.80))),
+            const SizedBox(width: 8),
+            Expanded(child: Text(p.$3, style: TextStyle(fontSize: 11, color: scheme.onSurface.withOpacity(0.50)))),
+          ]),
+        )),
+      ]),
     );
   }
+}
+
+// ─── 状态行 ───────────────────────────────────────────────────────────────────
+class _StatusRow extends StatelessWidget {
+  const _StatusRow({required this.text, required this.ok, required this.scheme, this.isError = false});
+  final String text;
+  final bool ok;
+  final ColorScheme scheme;
+  final bool isError;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isError ? Colors.red : (ok ? Colors.green : scheme.primary);
+    final icon  = isError ? Icons.error_rounded : (ok ? Icons.check_circle_rounded : Icons.info_rounded);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(children: [
+        Icon(icon, size: 14, color: color),
+        const SizedBox(width: 7),
+        Expanded(child: Text(text, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: color))),
+      ]),
+    );
+  }
+}
+
+// ─── 粒子背景 Painter ─────────────────────────────────────────────────────────
+class _ParticlePainter extends CustomPainter {
+  _ParticlePainter({required this.progress, required this.isDark, required this.primary});
+  final double progress;
+  final bool isDark;
+  final Color primary;
+
+  static final _rng = math.Random(42);
+  static final _particles = List.generate(38, (i) => [
+    _rng.nextDouble(), // x ratio
+    _rng.nextDouble(), // y ratio
+    _rng.nextDouble() * 0.6 + 0.2, // speed factor
+    _rng.nextDouble() * 2.5 + 0.8, // radius
+    _rng.nextDouble(),              // phase
+  ]);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    for (final p in _particles) {
+      final phase = (progress * p[2] + p[4]) % 1.0;
+      final x = p[0] * size.width;
+      final y = (p[1] + phase * 0.4) % 1.0 * size.height;
+      final opacity = (math.sin(phase * math.pi) * 0.55 + 0.05).clamp(0.0, 0.55);
+      final paint = Paint()
+        ..color = primary.withOpacity(isDark ? opacity * 0.7 : opacity * 0.35)
+        ..style = PaintingStyle.fill;
+      canvas.drawCircle(Offset(x, y), p[3], paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_ParticlePainter old) => old.progress != progress;
 }

@@ -17,7 +17,7 @@ class MoonXideBootstrap extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => AppState(tokenStore: TokenStore())..restore()),
+        ChangeNotifierProvider(create: (_) => AppState(tokenStore: TokenStore())),
         ChangeNotifierProvider(create: (_) => EditorState()),
         ChangeNotifierProvider(create: (_) => BuildCenterState()),
         ChangeNotifierProvider(create: (_) => AiWorkflowEngine()),
