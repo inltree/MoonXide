@@ -44,6 +44,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
   static List<Map<String, dynamic>> _cachedRepos = [];
   static final Map<String, List<_TreeNode>> _cachedTree = {};
   static String? _cachedRepoKey;
+  static final Map<String, String> _selectedPathByRepo = {};
 
   List<Map<String, dynamic>> _repos = _cachedRepos;
   List<_TreeNode> _roots = [];
@@ -202,13 +203,30 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Configure CMake
-        run: cmake -S . -B build
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
       - name: Build
         run: cmake --build build --config Release
+      - name: Package executable only
+        run: |
+          set -e
+          mkdir -p dist
+          BIN="build/$repoName"
+          if [ ! -f "\$BIN" ]; then
+            BIN="\$(find build -maxdepth 3 -type f -executable ! -path '*/CMakeFiles/*' | head -n 1)"
+          fi
+          if [ -z "\$BIN" ] || [ ! -f "\$BIN" ]; then
+            echo "No executable binary found under build/"
+            find build -maxdepth 4 -type f | sort
+            exit 1
+          fi
+          cp "\$BIN" "dist/$repoName-linux-x64"
+          chmod +x "dist/$repoName-linux-x64"
+          file "dist/$repoName-linux-x64"
       - uses: actions/upload-artifact@v4
         with:
-          name: $repoName-native
-          path: build/**
+          name: $repoName-linux-x64
+          path: dist/$repoName-linux-x64
+          if-no-files-found: error
 ''';
 
 
@@ -409,6 +427,7 @@ add_executable(\${PROJECT_NAME} main.cpp)
     if (key != null && key == _cachedRepoKey && _cachedTree.containsKey('')) {
       _roots = _cachedTree['']!;
       _loadedRepoKey = key;
+      _selectedPath = _selectedPathByRepo[key];
     }
     _fetchRepos();
   }
@@ -438,10 +457,13 @@ add_executable(\${PROJECT_NAME} main.cpp)
     final key = '$owner/$name';
     widget.state.selectRepository(owner, name);
     if (_loadedRepoKey == key && _treeCache.containsKey('')) {
-      setState(() => _roots = _treeCache['']!);
+      setState(() {
+        _roots = _treeCache['']!;
+        _selectedPath = _selectedPathByRepo[key];
+      });
       return;
     }
-    setState(() => _roots = []);
+    setState(() { _roots = []; _selectedPath = _selectedPathByRepo[key]; });
     _loadedRepoKey = key;
     _cachedRepoKey = key;
     await _fetchTree('', force: false);
@@ -521,6 +543,8 @@ add_executable(\${PROJECT_NAME} main.cpp)
     final owner = widget.state.selectedOwner;
     final repo = widget.state.selectedRepo;
     if (owner == null || repo == null || widget.state.github == null || node.isDir) return;
+    final repoKey = '$owner/$repo';
+    _selectedPathByRepo[repoKey] = node.path;
     setState(() { _openingPath = node.path; _selectedPath = node.path; });
     try {
       final name = node.name.toLowerCase();
@@ -971,6 +995,8 @@ add_executable(\${PROJECT_NAME} main.cpp)
     final scheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final selected = widget.state.selectedRepo;
+    final editorPath = context.watch<EditorState>().currentPath;
+    final effectiveSelectedPath = editorPath.isNotEmpty ? editorPath : _selectedPath;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1020,7 +1046,7 @@ itemBuilder: (_, i) => _TreeTile(
                          onOpen: _openFile,
                          scheme: scheme,
                          isDark: isDark,
-                         selectedPath: _selectedPath,
+                         selectedPath: effectiveSelectedPath,
                          openingPath: _openingPath,
                          onLongPress: _showFileMenu,
                        ),
@@ -1279,11 +1305,21 @@ class _TreeTileState extends State<_TreeTile> {
         margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
         decoration: BoxDecoration(
           color: isSelected
-              ? scheme.primary.withOpacity(isDark ? 0.18 : 0.12)
+              ? scheme.primary.withOpacity(isDark ? 0.20 : 0.13)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
+          border: isSelected
+              ? Border.all(color: scheme.primary.withOpacity(isDark ? 0.45 : 0.34), width: 0.8)
+              : null,
           boxShadow: isSelected
-              ? [BoxShadow(color: scheme.primary.withOpacity(0.18), blurRadius: 8, offset: const Offset(0, 2))]
+              ? [
+                  BoxShadow(
+                    color: scheme.primary.withOpacity(isDark ? 0.28 : 0.20),
+                    blurRadius: 14,
+                    spreadRadius: -1,
+                    offset: const Offset(0, 3),
+                  ),
+                ]
               : null,
         ),
         child: InkWell(
