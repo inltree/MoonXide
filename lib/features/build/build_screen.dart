@@ -22,15 +22,14 @@ class BuildScreen extends StatelessWidget {
     }
     build.start('正在触发 GitHub Actions…');
     try {
-      await state.github!.dispatchWorkflow(
+      final workflow = await state.github!.dispatchBestBuildWorkflow(
         owner: owner, repo: repo,
-        workflowFile: 'android-apk.yml',
         inputs: {
           'build_type':      state.buildProfile == BuildProfile.debug ? 'debug' : 'release',
           'publish_release': 'false',
         },
       );
-      build.updateProgress(statusText: '已触发构建，等待 GitHub Actions 响应…', value: 0.12);
+      build.updateProgress(statusText: '已触发 $workflow，等待 GitHub Actions 响应…', value: 0.12);
     } catch (e) {
       build.fail('触发失败：$e');
     }

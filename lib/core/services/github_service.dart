@@ -105,6 +105,24 @@ class GithubService {
     await _request('POST', '/repos/$owner/$repo/actions/workflows/$workflowFile/dispatches', body: {'ref': ref, 'inputs': inputs});
   }
 
+  Future<List<Map<String, dynamic>>> listWorkflows(String owner, String repo) async {
+    final data = await _request('GET', '/repos/$owner/$repo/actions/workflows');
+    return List<Map<String, dynamic>>.from(data['workflows'] as List);
+  }
+
+  Future<String> dispatchBestBuildWorkflow({required String owner, required String repo, String ref = 'main', required Map<String, dynamic> inputs}) async {
+    final workflows = await listWorkflows(owner, repo);
+    final candidates = ['android-apk.yml', 'build.yml', 'cmake.yml'];
+    for (final candidate in candidates) {
+      final found = workflows.where((w) => w['path']?.toString().endsWith('/$candidate') == true).toList();
+      if (found.isNotEmpty) {
+        await dispatchWorkflow(owner: owner, repo: repo, workflowFile: candidate, ref: ref, inputs: candidate == 'cmake.yml' ? {} : inputs);
+        return candidate;
+      }
+    }
+    throw Exception('未找到可触发的工作流，请先创建 android-apk.yml、build.yml 或 cmake.yml');
+  }
+
   Future<List<Map<String, dynamic>>> listWorkflowRuns(String owner, String repo) async {
     final data = await _request('GET', '/repos/$owner/$repo/actions/runs?per_page=20');
     return List<Map<String, dynamic>>.from(data['workflow_runs'] as List);

@@ -70,8 +70,34 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     'android_java': {'label': 'Android Java 应用', 'icon': Icons.local_cafe_rounded},
     'cpp_native': {'label': 'C/C++ 原生可执行', 'icon': Icons.memory_rounded},
   };
-// GitHub Actions 工作流模板（文件名与 build_screen 保持一致：android-apk.yml）
-  String _githubActionsWorkflow(String repoName) => '''
+// GitHub Actions 工作流模板：按项目类型生成，不能所有模板都走 Flutter
+  String _workflowPathForTemplate(String tpl) {
+    switch (tpl) {
+      case 'cpp_native':
+        return '.github/workflows/cmake.yml';
+      case 'flutter':
+      case 'android_kotlin':
+      case 'android_java':
+        return '.github/workflows/android-apk.yml';
+      default:
+        return '.github/workflows/build.yml';
+    }
+  }
+
+  String _workflowForTemplate(String tpl, String repoName) {
+    switch (tpl) {
+      case 'android_kotlin':
+      case 'android_java':
+        return _androidGradleWorkflow(repoName);
+      case 'cpp_native':
+        return _cppWorkflow(repoName);
+      case 'flutter':
+      default:
+        return _flutterWorkflow(repoName);
+    }
+  }
+
+  String _flutterWorkflow(String repoName) => '''
 name: Build APK
 on:
   push:
@@ -103,10 +129,10 @@ jobs:
         with:
           flutter-version: '3.x'
           channel: stable
-      - name: Install dependencies
-        run: flutter pub get
       - name: Generate Android platform
         run: flutter create --platforms=android . || true
+      - name: Install dependencies
+        run: flutter pub get
       - name: Build APK
         run: |
           if [ "\${{ github.event.inputs.build_type }}" = "release" ]; then
@@ -118,6 +144,71 @@ jobs:
         with:
           name: $repoName-apk
           path: build/app/outputs/flutter-apk/*.apk
+''';
+
+  String _androidGradleWorkflow(String repoName) => '''
+name: Build APK
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type (debug/release)'
+        required: false
+        default: 'debug'
+        type: choice
+        options: [debug, release]
+      publish_release:
+        description: 'Publish as GitHub Release'
+        required: false
+        default: 'false'
+        type: choice
+        options: ['false', 'true']
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - name: Build APK
+        run: |
+          if [ "\${{ github.event.inputs.build_type }}" = "release" ]; then
+            gradle assembleRelease
+          else
+            gradle assembleDebug
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: $repoName-apk
+          path: app/build/outputs/apk/**/*.apk
+''';
+
+  String _cppWorkflow(String repoName) => '''
+name: Build Native
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure CMake
+        run: cmake -S . -B build
+      - name: Build
+        run: cmake --build build --config Release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: $repoName-native
+          path: build/**
 ''';
 
 
@@ -159,40 +250,130 @@ class MyApp extends StatelessWidget {
         };
       case 'android_kotlin':
         return {
-          'app/src/main/java/com/example/app/MainActivity.kt': '''package com.example.app
+          'settings.gradle': '''pluginManagement {
+    repositories { google(); mavenCentral(); gradlePluginPortal() }
+}
+dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
+rootProject.name = '${repoName.replaceAll("'", "")}'
+include ':app'
+''',
+          'build.gradle': '''plugins {
+    id 'com.android.application' version '8.5.2' apply false
+    id 'org.jetbrains.kotlin.android' version '1.9.24' apply false
+}
+''',
+          'app/build.gradle': '''plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+}
 
-import android.os.Bundle
-import androidx.appcompat.app.AppCompatActivity
+android {
+    namespace 'com.example.app'
+    compileSdk 35
 
-class MainActivity : AppCompatActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
+    defaultConfig {
+        applicationId 'com.example.app'
+        minSdk 23
+        targetSdk 35
+        versionCode 1
+        versionName '1.0'
     }
 }
 ''',
-          'app/src/main/res/layout/activity_main.xml': '''<?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:gravity="center">
-    <TextView android:text="Hello, $repoName!" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
-</LinearLayout>
+          'app/src/main/AndroidManifest.xml': '''<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:theme="@style/AppTheme" android:label="$repoName" android:allowBackup="true" android:supportsRtl="true">
+        <activity android:name=".MainActivity" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
+''',
+          'app/src/main/res/values/styles.xml': '''<resources>
+    <style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar" />
+</resources>
+''',
+          'app/src/main/java/com/example/app/MainActivity.kt': '''package com.example.app
+
+import android.app.Activity
+import android.os.Bundle
+import android.widget.TextView
+
+class MainActivity : Activity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        val text = TextView(this)
+        text.text = "Hello, $repoName!"
+        text.textSize = 22f
+        text.gravity = android.view.Gravity.CENTER
+        setContentView(text)
+    }
+}
 ''',
           'README.md': '# $repoName\n\nAn Android Kotlin application.\n',
         };
       case 'android_java':
         return {
+          'settings.gradle': '''pluginManagement {
+    repositories { google(); mavenCentral(); gradlePluginPortal() }
+}
+dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
+rootProject.name = '${repoName.replaceAll("'", "")}'
+include ':app'
+''',
+          'build.gradle': '''plugins {
+    id 'com.android.application' version '8.5.2' apply false
+}
+''',
+          'app/build.gradle': '''plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.example.app'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.example.app'
+        minSdk 23
+        targetSdk 35
+        versionCode 1
+        versionName '1.0'
+    }
+}
+''',
+          'app/src/main/AndroidManifest.xml': '''<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:theme="@style/AppTheme" android:label="$repoName" android:allowBackup="true" android:supportsRtl="true">
+        <activity android:name=".MainActivity" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
+''',
+          'app/src/main/res/values/styles.xml': '''<resources>
+    <style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar" />
+</resources>
+''',
           'app/src/main/java/com/example/app/MainActivity.java': '''package com.example.app;
 
+import android.app.Activity;
 import android.os.Bundle;
-import androidx.appcompat.app.AppCompatActivity;
+import android.widget.TextView;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
+        TextView text = new TextView(this);
+        text.setText("Hello, $repoName!");
+        text.setTextSize(22f);
+        text.setGravity(android.view.Gravity.CENTER);
+        setContentView(text);
     }
 }
 ''',
@@ -442,11 +623,11 @@ add_executable(\${PROJECT_NAME} main.cpp)
         // 推送 GitHub Actions workflow
         if (mounted) setState(() => _error = '推送 CI/CD 工作流…');
         try {
-          final wf = _githubActionsWorkflow(name);
+          final wf = _workflowForTemplate(_selectedTemplate, name);
           await widget.state.github!.putFile(
             owner: owner,
             repo: name,
-            path: '.github/workflows/build.yml',
+            path: _workflowPathForTemplate(_selectedTemplate),
             message: 'Init: add GitHub Actions workflow',
             contentBase64: base64Encode(utf8.encode(wf)),
           );
