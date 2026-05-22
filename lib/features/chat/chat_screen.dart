@@ -41,7 +41,38 @@ class _ChatScreenState extends State<ChatScreen> {
     final text = _inputCtrl.text.trim();
     if (text.isEmpty || chat.busy) return;
     _inputCtrl.clear();
-    _toolCalls.clear();
+    setState(() => _toolCalls.clear());
+
+    // 注入真实步骤执行器
+    workflow.setExecutor((title, detail, goal) async {
+      final cfg = aiConfig.config;
+      if (cfg.baseUrl.trim().isEmpty || cfg.apiKey.trim().isEmpty) return '未配置 AI，跳过步骤。';
+      final stepPrompt = '你正在执行开发任务的一个步骤。\n\n总目标：$goal\n当前步骤：$title\n步骤说明：$detail\n\n${AiToolExecutor.toolsDescription}\n\n请执行此步骤，如需操作仓库请输出工具调用 JSON，否则直接给出分析结论。';
+      final cfgStep = cfg.copyWith(systemPrompt: stepPrompt, stream: false);
+      try {
+        final raw = await AiApiClient().sendWithHistory(cfgStep, [], goal);
+        final reply = _extractReply(raw, false);
+        final calls = AiToolExecutor.parseFromText(reply);
+        if (calls.isNotEmpty && mounted) {
+          setState(() => _toolCalls.addAll(calls));
+          final executor = AiToolExecutor(appState: context.read<AppState>(), editorState: context.read<EditorState>());
+          final buf = StringBuffer();
+          for (var i = 0; i < _toolCalls.length; i++) {
+            final c = _toolCalls[i];
+            if (c.status != AiToolCallStatus.pending) continue;
+            setState(() => _toolCalls[i] = c.copyWith(status: AiToolCallStatus.running));
+            final res = await executor.execute(c);
+            setState(() => _toolCalls[i] = c.copyWith(status: AiToolCallStatus.completed, result: res));
+            buf.writeln(res);
+          }
+          return '$reply\n\n工具结果：\n${buf.toString()}';
+        }
+        return reply.isEmpty ? '步骤完成（无输出）' : reply;
+      } catch (e) {
+        return '步骤执行失败：$e';
+      }
+    });
+
     workflow.createTask(text);
     workflow.startAutoRun();
     await chat.sendUserText(text, aiConfig);

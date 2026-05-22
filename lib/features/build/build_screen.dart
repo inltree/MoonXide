@@ -26,9 +26,8 @@ class BuildScreen extends StatelessWidget {
         owner: owner, repo: repo,
         workflowFile: 'android-apk.yml',
         inputs: {
-          'build_type':       state.buildProfile == BuildProfile.debug ? 'debug' : 'release',
-          'publish_release':  'false',
-          'release_tag':      'latest',
+          'build_type':      state.buildProfile == BuildProfile.debug ? 'debug' : 'release',
+          'publish_release': 'false',
         },
       );
       build.updateProgress(statusText: '已触发构建，等待 GitHub Actions 响应…', value: 0.12);

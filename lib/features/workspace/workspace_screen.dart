@@ -70,8 +70,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     'android_java': {'label': 'Android Java 应用', 'icon': Icons.local_cafe_rounded},
     'cpp_native': {'label': 'C/C++ 原生可执行', 'icon': Icons.memory_rounded},
   };
-
-  // GitHub Actions 工作流模板
+// GitHub Actions 工作流模板（文件名与 build_screen 保持一致：android-apk.yml）
   String _githubActionsWorkflow(String repoName) => '''
 name: Build APK
 on:
@@ -80,11 +79,17 @@ on:
   workflow_dispatch:
     inputs:
       build_type:
-        description: 'Build type'
+        description: 'Build type (debug/release)'
         required: false
         default: 'debug'
         type: choice
         options: [debug, release]
+      publish_release:
+        description: 'Publish as GitHub Release'
+        required: false
+        default: 'false'
+        type: choice
+        options: ['false', 'true']
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -98,13 +103,23 @@ jobs:
         with:
           flutter-version: '3.x'
           channel: stable
-      - run: flutter pub get
-      - run: flutter build apk --\${{ github.event.inputs.build_type || 'debug' }} --no-tree-shake-icons
+      - name: Install dependencies
+        run: flutter pub get
+      - name: Generate Android platform
+        run: flutter create --platforms=android . || true
+      - name: Build APK
+        run: |
+          if [ "\${{ github.event.inputs.build_type }}" = "release" ]; then
+            flutter build apk --release --no-tree-shake-icons
+          else
+            flutter build apk --debug --no-tree-shake-icons
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: $repoName-apk
           path: build/app/outputs/flutter-apk/*.apk
 ''';
+
 
   // 模板文件内容
   Map<String, String> _templateFiles(String tpl, String repoName) {
@@ -579,12 +594,37 @@ add_executable(\${PROJECT_NAME} main.cpp)
     final repo = widget.state.selectedRepo;
     if (owner == null || repo == null || widget.state.github == null) return;
     try {
-      final file = await widget.state.github!.getFile(owner, repo, node.path);
-      final sha = file['sha'] as String?;
-      await widget.state.github!.deleteFile(owner: owner, repo: repo, path: node.path, sha: sha ?? '', message: 'Delete ${node.name}');
+      if (node.isDir) {
+        // 目录：递归列出并删除所有文件
+        await _deleteDirRecursive(owner, repo, node.path);
+      } else {
+        final file = await widget.state.github!.getFile(owner, repo, node.path);
+        final sha = file['sha'] as String?;
+        await widget.state.github!.deleteFile(
+          owner: owner, repo: repo, path: node.path,
+          sha: sha ?? '', message: 'Delete ${node.name}',
+        );
+      }
       await _fetchTree('', force: true);
     } catch (e) {
       setState(() => _error = '删除失败：$e');
+    }
+  }
+
+  Future<void> _deleteDirRecursive(String owner, String repo, String dirPath) async {
+    final items = await widget.state.github!.getContents(owner, repo, path: dirPath);
+    for (final item in items) {
+      final itemPath = item['path'] as String;
+      final itemType = item['type'] as String?;
+      if (itemType == 'dir') {
+        await _deleteDirRecursive(owner, repo, itemPath);
+      } else {
+        final sha = item['sha'] as String?;
+        await widget.state.github!.deleteFile(
+          owner: owner, repo: repo, path: itemPath,
+          sha: sha ?? '', message: 'Delete $itemPath',
+        );
+      }
     }
   }
 

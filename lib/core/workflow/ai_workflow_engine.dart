@@ -5,6 +5,10 @@ import 'ai_task_planner.dart';
 import 'ai_task_step.dart';
 import 'ai_task_step_status.dart';
 
+/// 真实步骤执行回调类型
+/// 由 ChatScreen 注入，每个步骤调用时传入步骤标题和详情，返回执行结果
+typedef StepExecutor = Future<String> Function(String title, String detail, String goal);
+
 class AiWorkflowEngine extends ChangeNotifier {
   final AiTaskPlanner planner;
   AiTaskPlan? currentPlan;
@@ -12,11 +16,19 @@ class AiWorkflowEngine extends ChangeNotifier {
   bool paused = false;
   String eventLog = '';
 
+  /// 真实执行器，由 ChatScreen 在发送消息时注入
+  StepExecutor? _executor;
+
   AiWorkflowEngine({AiTaskPlanner? planner}) : planner = planner ?? AiTaskPlanner();
+
+  /// 注入真实执行器
+  void setExecutor(StepExecutor executor) {
+    _executor = executor;
+  }
 
   void createTask(String instruction) {
     currentPlan = planner.createPlan(instruction);
-    eventLog = '已创建任务目标：${currentPlan!.goal}';
+    eventLog = '已创建任务：${currentPlan!.goal}';
     running = false;
     paused = false;
     notifyListeners();
@@ -28,57 +40,45 @@ class AiWorkflowEngine extends ChangeNotifier {
     paused = false;
     notifyListeners();
     while (running && !paused && currentPlan != null && !currentPlan!.finished) {
-      final index = currentPlan!.steps.indexWhere((e) => e.status == AiTaskStepStatus.pending || e.status == AiTaskStepStatus.failed);
+      final index = currentPlan!.steps.indexWhere(
+          (e) => e.status == AiTaskStepStatus.pending || e.status == AiTaskStepStatus.failed);
       if (index < 0) {
         currentPlan = currentPlan!.copyWith(finished: true);
-        eventLog = '$eventLog\n全部任务步骤已完成。';
+        eventLog = '$eventLog\n✅ 全部步骤完成。';
         running = false;
         notifyListeners();
         break;
       }
       await runStep(index);
-      await Future.delayed(const Duration(milliseconds: 350));
+      await Future.delayed(const Duration(milliseconds: 200));
     }
   }
 
   Future<void> runStep(int index) async {
     final plan = currentPlan;
     if (plan == null || index < 0 || index >= plan.steps.length) return;
-    _updateStep(index, plan.steps[index].copyWith(status: AiTaskStepStatus.running));
-    eventLog = '$eventLog\n正在执行：${plan.steps[index].title}';
+    final step = plan.steps[index];
+    _updateStep(index, step.copyWith(status: AiTaskStepStatus.running));
+    eventLog = '$eventLog\n▶ ${step.title}';
     notifyListeners();
     try {
-      await Future.delayed(const Duration(milliseconds: 500));
-      final result = _executeVirtualStep(plan.steps[index]);
-      _updateStep(index, plan.steps[index].copyWith(status: AiTaskStepStatus.completed, result: result));
-      eventLog = '$eventLog\n已完成：${plan.steps[index].title}';
+      String result;
+      if (_executor != null) {
+        // 真实执行：调用注入的 AI + 工具链
+        result = await _executor!(step.title, step.detail, plan.goal);
+      } else {
+        // 降级：无执行器时给出提示
+        await Future.delayed(const Duration(milliseconds: 300));
+        result = '${step.title}：请先在 AI 对话中发送任务以激活执行器。';
+      }
+      _updateStep(index, step.copyWith(status: AiTaskStepStatus.completed, result: result));
+      eventLog = '$eventLog\n✓ ${step.title}';
     } catch (e) {
-      _updateStep(index, plan.steps[index].copyWith(status: AiTaskStepStatus.failed, result: e.toString()));
-      eventLog = '$eventLog\n失败：${plan.steps[index].title}，$e';
+      _updateStep(index, step.copyWith(status: AiTaskStepStatus.failed, result: e.toString()));
+      eventLog = '$eventLog\n✗ ${step.title}：$e';
       running = false;
     }
     notifyListeners();
-  }
-
-  String _executeVirtualStep(AiTaskStep step) {
-    switch (step.title) {
-      case '理解需求':
-        return '已提取任务目标和限制条件。';
-      case '检查工作区':
-        return '已读取当前仓库上下文、文件结构和构建状态。';
-      case '制定执行方案':
-        return '已生成可执行任务步骤，并启用自动连续执行。';
-      case '修改项目内容':
-        return '已根据目标准备代码、配置、权限、依赖或工作流修改。';
-      case '提交与构建':
-        return '已进入保存、提交、Debug/Release 构建链路。';
-      case '验证结果':
-        return '已检查构建状态、日志、产物和可安装结果。';
-      case '收尾处理':
-        return '已清理临时状态并完成任务记录。';
-      default:
-        return '步骤已完成。';
-    }
   }
 
   void _updateStep(int index, AiTaskStep next) {
@@ -91,7 +91,7 @@ class AiWorkflowEngine extends ChangeNotifier {
   void pause() {
     paused = true;
     running = false;
-    eventLog = '$eventLog\n任务已暂停。';
+    eventLog = '$eventLog\n⏸ 任务已暂停。';
     notifyListeners();
   }
 
@@ -105,6 +105,7 @@ class AiWorkflowEngine extends ChangeNotifier {
     running = false;
     paused = false;
     eventLog = '';
+    _executor = null;
     notifyListeners();
   }
 }
