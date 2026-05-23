@@ -7,6 +7,7 @@ import '../../app/mx_widgets.dart';
 import '../../core/services/app_state.dart';
 import '../../core/services/editor_state.dart';
 import '../../core/services/build_center_state.dart';
+import '../../core/services/log_parser.dart';
 import '../workspace/workspace_screen.dart';
 import '../editor/editor_screen.dart';
 import '../chat/chat_screen.dart';
@@ -132,6 +133,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         }
       } else if (status == 'completed') {
         build.fail('构建失败：${conclusion ?? 'unknown'}');
+        try {
+          final bytes = await state.github!.downloadRunLogs(owner, repo, runId);
+          final logsDir = Directory('/sdcard/Download/MoonXide/logs');
+          if (!await logsDir.exists()) await logsDir.create(recursive: true);
+          final logFile = File('${logsDir.path}/run_$runId.zip');
+          await logFile.writeAsBytes(bytes);
+          final summary = LogParser().summarize(String.fromCharCodes(bytes));
+          build.setLog(summary, filePath: logFile.path);
+        } catch (_) {}
       } else {
         final stepText = currentStep != null ? '\n当前步骤：$currentStep' : '';
         build.updateProgress(

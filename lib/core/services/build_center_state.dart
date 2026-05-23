@@ -5,6 +5,7 @@ enum BuildOutcome { idle, running, success, failure }
 class BuildCenterState extends ChangeNotifier {
   String status = '未开始';
   String? logText;
+  String? logFilePath;
   String? artifactLocalPath;
   String? artifactDownloadUrl;
   String? artifactName;
@@ -85,8 +86,9 @@ class BuildCenterState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setLog(String? value) {
+  void setLog(String? value, {String? filePath}) {
     logText = value;
+    logFilePath = filePath;
     notifyListeners();
   }
 

@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../app/mx_widgets.dart';
@@ -98,8 +99,17 @@ class BuildScreen extends StatelessWidget {
       if (status == 'completed' && conclusion != 'success') {
         build.fail('构建失败：${conclusion ?? 'unknown'}\n$htmlUrl');
         final bytes   = await state.github!.downloadRunLogs(owner, repo, runId);
-        final summary = LogParser().summarize(String.fromCharCodes(bytes));
-        build.setLog(summary);
+        try {
+          final logsDir = Directory('/sdcard/Download/MoonXide/logs');
+          if (!await logsDir.exists()) await logsDir.create(recursive: true);
+          final logFile = File('${logsDir.path}/run_$runId.zip');
+          await logFile.writeAsBytes(bytes);
+          final summary = LogParser().summarize(String.fromCharCodes(bytes));
+          build.setLog(summary, filePath: logFile.path);
+        } catch (_) {
+          final summary = LogParser().summarize(String.fromCharCodes(bytes));
+          build.setLog(summary);
+        }
       }
     } catch (e) {
       build.setStatus('读取状态失败：$e');
@@ -226,8 +236,32 @@ class BuildScreen extends StatelessWidget {
         if (build.logText != null) ...[
           const MxSectionLabel('错误日志'),
           MxCard(
-            child: SelectableText(build.logText!,
-                style: const TextStyle(fontFamily: 'monospace', fontSize: 11)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SelectableText(build.logText!,
+                    style: const TextStyle(fontFamily: 'monospace', fontSize: 11)),
+                if (build.logFilePath != null) ...[
+                  const SizedBox(height: 12),
+                  MxButton(
+                    label: '查看完整日志',
+                    icon: Icons.open_in_new_rounded,
+                    filled: false,
+                    onPressed: () async {
+                      try {
+                        await AndroidInstaller().openFile(build.logFilePath!);
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('打开日志失败：$e')),
+                          );
+                        }
+                      }
+                    },
+                  ),
+                ],
+              ],
+            ),
           ),
         ],
       ],
