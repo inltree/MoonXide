@@ -37,16 +37,16 @@ class MxGlass extends StatelessWidget {
         border: border
             ? Border.all(
                 color: isDark
-                    ? Colors.white.withOpacity(0.09)
-                    : Colors.white.withOpacity(0.70),
+                    ? Colors.white.withOpacity(0.08)
+                    : Colors.black.withOpacity(0.04),
               )
             : null,
         boxShadow: shadow
             ? [
                 BoxShadow(
-                  color: const Color(0xFF3B8FC7).withOpacity(isDark ? 0.14 : 0.10),
-                  blurRadius: 20,
-                  offset: const Offset(0, 6),
+                  color: const Color(0xFF3B8FC7).withOpacity(isDark ? 0.08 : 0.05),
+                  blurRadius: 15,
+                  offset: const Offset(0, 4),
                 )
               ]
             : null,
@@ -83,30 +83,31 @@ class MxCard extends StatelessWidget {
         : scheme.primary.withOpacity(0.10);
     final card = Padding(
       padding: const EdgeInsets.symmetric(vertical: 5),
-      child: Material(
-        color: base.withOpacity(isDark ? 0.85 : 0.92),
-        borderRadius: BorderRadius.circular(radius),
-        elevation: 0,
-        shadowColor: Colors.transparent,
-        child: InkWell(
+      child: Container(
+        decoration: BoxDecoration(
+          color: base.withOpacity(isDark ? 0.65 : 0.82), // 更透明的磨砂质感
           borderRadius: BorderRadius.circular(radius),
-          onTap: onTap,
-          splashColor: scheme.primary.withOpacity(0.08),
-          highlightColor: scheme.primary.withOpacity(0.04),
-          child: Container(
-            padding: padding ?? const EdgeInsets.all(15),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(radius),
-              border: Border.all(color: borderC, width: 1.0),
-              boxShadow: [
-                BoxShadow(
-                  color: scheme.primary.withOpacity(isDark ? 0.08 : 0.05),
-                  blurRadius: 12,
-                  offset: const Offset(0, 3),
-                ),
-              ],
+          border: Border.all(color: borderC, width: 1.0),
+          boxShadow: [
+            BoxShadow(
+              color: scheme.primary.withOpacity(isDark ? 0.08 : 0.05),
+              blurRadius: 16,
+              offset: const Offset(0, 4),
             ),
-            child: child,
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(radius),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(radius),
+            onTap: onTap,
+            splashColor: scheme.primary.withOpacity(0.08),
+            highlightColor: scheme.primary.withOpacity(0.04),
+            child: Padding(
+              padding: padding ?? const EdgeInsets.all(15),
+              child: child,
+            ),
           ),
         ),
       ),
@@ -114,7 +115,6 @@ class MxCard extends StatelessWidget {
     return onTap == null ? card : _MxPressable(child: card);
   }
 }
-
 // ─── 自定义下拉菜单 ───────────────────────────────────────────────────────────
 class MxDropdown<T> extends StatelessWidget {
   const MxDropdown({
@@ -140,9 +140,16 @@ class MxDropdown<T> extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
       decoration: BoxDecoration(
         color: (isDark ? const Color(0xFF0F2230) : Colors.white)
-            .withOpacity(isDark ? 0.82 : 0.90),
+            .withOpacity(isDark ? 0.65 : 0.85),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: scheme.primary.withOpacity(0.18)),
+        boxShadow: [
+          BoxShadow(
+            color: scheme.primary.withOpacity(isDark ? 0.08 : 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<T>(
@@ -158,15 +165,17 @@ class MxDropdown<T> extends StatelessWidget {
               .map((e) => DropdownMenuItem<T>(
                     value: e.value,
                     child: Row(children: [
-                      if (e.icon != null) ...[
-                        Icon(e.icon, size: 16, color: scheme.primary),
-                        const SizedBox(width: 8),
-                      ],
-                      Text(e.label),
+                      if (prefix != null) ...[prefix!, const SizedBox(width: 8)],
+                      Text(e.label, style: TextStyle(color: scheme.onSurface, fontWeight: FontWeight.w600)),
                     ]),
                   ))
               .toList(),
           onChanged: onChanged,
+        ),
+      ),
+    );
+  }
+}
           isExpanded: true,
         ),
       ),
@@ -203,6 +212,7 @@ class MxButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme   = Theme.of(context).colorScheme;
+    final isDark   = Theme.of(context).brightness == Brightness.dark;
     final c        = color ?? scheme.primary;
     final disabled = onPressed == null;
     final radius = small ? 10.0 : 14.0;
@@ -224,8 +234,8 @@ class MxButton extends StatelessWidget {
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                       colors: [
-                        c,
-                        Color.lerp(c, Colors.black, 0.18) ?? c,
+                        c.withOpacity(isDark ? 0.8 : 0.9),
+                        Color.lerp(c, Colors.black, 0.18)!.withOpacity(isDark ? 0.8 : 0.9),
                       ],
                     )
                   : null,
@@ -308,7 +318,7 @@ class MxTextField extends StatelessWidget {
         boxShadow: [
           BoxShadow(
             color: scheme.primary.withOpacity(isDark ? 0.05 : 0.04),
-            blurRadius: 8,
+            blurRadius: 10,
             offset: const Offset(0, 2),
           ),
         ],
@@ -329,7 +339,7 @@ class MxTextField extends StatelessWidget {
           hintStyle: TextStyle(color: scheme.onSurface.withOpacity(0.35), fontSize: 14),
           filled: true,
           fillColor: (isDark ? const Color(0xFF0F2230) : Colors.white)
-              .withOpacity(isDark ? 0.85 : 0.94),
+              .withOpacity(isDark ? 0.65 : 0.85),
           border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(13),
               borderSide: BorderSide(color: scheme.primary.withOpacity(0.16))),
@@ -421,19 +431,30 @@ class MxEmpty extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 32),
       child: Column(
         mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, size: 48, color: scheme.onSurface.withOpacity(0.18)),
-          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: scheme.primary.withOpacity(0.08),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, size: 42, color: scheme.primary.withOpacity(0.6)),
+          ),
+          const SizedBox(height: 16),
           Text(label,
               style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  color: scheme.onSurface.withOpacity(0.45))),
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  color: scheme.onSurface.withOpacity(0.7))),
           if (hint != null) ...[
-            const SizedBox(height: 4),
+            const SizedBox(height: 8),
             Text(hint!,
+                textAlign: TextAlign.center,
                 style: TextStyle(
                     fontSize: 12,
-                    color: scheme.onSurface.withOpacity(0.30))),
+                    height: 1.5,
+                    color: scheme.onSurface.withOpacity(0.45))),
           ],
         ],
       ),
