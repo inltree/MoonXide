@@ -1242,30 +1242,93 @@ class _TreeTileState extends State<_TreeTile> {
     final node = widget.node;
     if (node.isDir) return node.expanded ? Icons.folder_open_rounded : Icons.folder_rounded;
     final lower = node.name.toLowerCase();
-    if (lower == 'package.json') return Icons.inventory_2_rounded;
-    if (lower == 'dockerfile') return Icons.directions_boat_rounded;
-    if (lower == '.gitignore') return Icons.hide_source_rounded;
-    if (lower == 'pubspec.yaml' || lower == 'pubspec.yml') return Icons.flutter_dash;
-    if (lower == 'gradle.properties' || lower == 'settings.gradle' || lower == 'build.gradle') return Icons.precision_manufacturing_rounded;
+    // 文件名级映射（精确）
+    if (lower == 'package.json' || lower == 'package-lock.json' || lower == 'pnpm-lock.yaml' || lower == 'yarn.lock') return Icons.inventory_2_rounded;
+    if (lower == 'dockerfile' || lower.endsWith('.dockerfile') || lower == '.dockerignore') return Icons.directions_boat_filled_rounded;
+    if (lower == '.gitignore' || lower == '.gitattributes' || lower == '.gitmodules') return Icons.source_rounded;
+    if (lower == 'pubspec.yaml' || lower == 'pubspec.yml' || lower == 'pubspec.lock') return Icons.flutter_dash_rounded;
+    if (lower == 'cargo.toml' || lower == 'cargo.lock') return Icons.settings_rounded;
+    if (lower == 'go.mod' || lower == 'go.sum') return Icons.hub_rounded;
+    if (lower == 'cmakelists.txt' || lower.endsWith('.cmake')) return Icons.architecture_rounded;
+    if (lower == 'makefile' || lower == 'gnumakefile') return Icons.build_rounded;
+    if (lower.startsWith('readme')) return Icons.menu_book_rounded;
+    if (lower.startsWith('license') || lower.startsWith('licence')) return Icons.gavel_rounded;
+    if (lower.startsWith('changelog') || lower == 'history.md') return Icons.history_edu_rounded;
+    if (lower.endsWith('.gradle') || lower.endsWith('.gradle.kts') || lower == 'gradle.properties' || lower == 'settings.gradle' || lower == 'build.gradle') return Icons.precision_manufacturing_rounded;
+    if (lower == 'androidmanifest.xml') return Icons.android_rounded;
+    if (lower.endsWith('.env') || lower == '.env' || lower.startsWith('.env.')) return Icons.vpn_key_rounded;
+    if (lower == '.editorconfig' || lower.startsWith('.eslint') || lower.startsWith('.prettier')) return Icons.tune_rounded;
+    if (lower.endsWith('.workflow.yml') || lower.endsWith('.workflow.yaml') ||
+        lower.startsWith('.github/workflows/')) return Icons.play_circle_outline_rounded;
+
     final ext = lower.contains('.') ? lower.split('.').last : '';
     switch (ext) {
-      case 'dart': return Icons.flutter_dash;
-      case 'js': case 'mjs': case 'cjs': return Icons.data_object_rounded;
-      case 'ts': return Icons.code_rounded;
-      case 'py': return Icons.smart_toy_rounded;
-      case 'java': return Icons.local_cafe_rounded;
+      // Dart / Flutter
+      case 'dart': return Icons.bolt_rounded;
+      // Web
+      case 'js': case 'mjs': case 'cjs': return Icons.javascript_rounded;
+      case 'ts': case 'tsx': return Icons.code_rounded;
+      case 'jsx': return Icons.code_rounded;
+      case 'vue': return Icons.layers_rounded;
+      case 'svelte': return Icons.layers_outlined;
+      case 'html': case 'htm': return Icons.html_rounded;
+      case 'css': case 'scss': case 'sass': case 'less': return Icons.css_rounded;
+      // 数据/配置
+      case 'json': case 'json5': case 'jsonc': return Icons.data_object_rounded;
+      case 'yaml': case 'yml': return Icons.list_alt_rounded;
+      case 'toml': case 'ini': case 'cfg': case 'conf': case 'properties': return Icons.tune_rounded;
+      case 'xml': case 'plist': return Icons.account_tree_rounded;
+      case 'csv': case 'tsv': return Icons.table_chart_rounded;
+      // 文档
+      case 'md': case 'markdown': case 'mdx': return Icons.description_rounded;
+      case 'txt': case 'log': return Icons.article_rounded;
+      case 'pdf': return Icons.picture_as_pdf_rounded;
+      case 'doc': case 'docx': return Icons.description_outlined;
+      case 'xls': case 'xlsx': return Icons.grid_on_rounded;
+      case 'ppt': case 'pptx': return Icons.slideshow_rounded;
+      // 编程语言
+      case 'py': case 'pyw': case 'pyi': return Icons.psychology_rounded;
+      case 'java': return Icons.coffee_rounded;
       case 'kt': case 'kts': return Icons.android_rounded;
       case 'c': case 'h': return Icons.memory_rounded;
-      case 'cpp': case 'cc': case 'cxx': case 'hpp': return Icons.developer_board_rounded;
-      case 'html': return Icons.web_asset_rounded;
-      case 'css': return Icons.palette_rounded;
-      case 'json': return Icons.data_object_rounded;
-      case 'yaml': case 'yml': return Icons.tune_rounded;
-      case 'xml': return Icons.code_rounded;
-      case 'md': return Icons.article_rounded;
-      case 'sh': case 'bash': return Icons.terminal_rounded;
-      case 'png': case 'jpg': case 'jpeg': case 'svg': case 'webp': return Icons.image_rounded;
+      case 'cpp': case 'cc': case 'cxx': case 'hpp': case 'hxx': return Icons.developer_board_rounded;
+      case 'cs': return Icons.tag_rounded;
+      case 'rs': return Icons.settings_suggest_rounded;
+      case 'go': return Icons.hub_outlined;
+      case 'swift': return Icons.flight_rounded;
+      case 'rb': return Icons.diamond_rounded;
+      case 'php': return Icons.php_rounded;
+      case 'lua': return Icons.dark_mode_rounded;
+      case 'r': return Icons.bar_chart_rounded;
+      case 'scala': return Icons.terrain_rounded;
+      case 'sql': return Icons.storage_rounded;
+      case 'dart_tool': return Icons.build_circle_rounded;
+      // Shell / 脚本
+      case 'sh': case 'bash': case 'zsh': case 'fish': return Icons.terminal_rounded;
+      case 'ps1': case 'psm1': return Icons.terminal_rounded;
+      case 'bat': case 'cmd': return Icons.terminal_rounded;
+      // 图片
+      case 'png': case 'jpg': case 'jpeg': case 'gif': case 'webp': case 'bmp': case 'tiff': return Icons.image_rounded;
+      case 'svg': return Icons.brush_rounded;
+      case 'ico': return Icons.app_shortcut_rounded;
+      // 字体
+      case 'ttf': case 'otf': case 'woff': case 'woff2': return Icons.font_download_rounded;
+      // 视频
+      case 'mp4': case 'mov': case 'avi': case 'mkv': case 'webm': case 'flv': return Icons.movie_rounded;
+      // 音频
+      case 'mp3': case 'wav': case 'ogg': case 'flac': case 'm4a': case 'aac': return Icons.music_note_rounded;
+      // 压缩 / 包
+      case 'zip': case 'rar': case '7z': case 'tar': case 'gz': case 'bz2': case 'xz': return Icons.archive_rounded;
+      case 'apk': case 'aab': return Icons.android_rounded;
+      case 'ipa': return Icons.apple_rounded;
+      case 'jar': case 'war': case 'aar': return Icons.coffee_outlined;
+      case 'so': case 'dll': case 'dylib': return Icons.memory_rounded;
+      case 'exe': case 'msi': return Icons.terminal_rounded;
+      case 'deb': case 'rpm': case 'dmg': case 'pkg': return Icons.inventory_rounded;
+      case 'keystore': case 'jks': case 'pem': case 'p12': case 'pfx': case 'cer': case 'crt': case 'key': return Icons.lock_rounded;
+      // 构建
       case 'gradle': return Icons.precision_manufacturing_rounded;
+      case 'cmake': return Icons.architecture_rounded;
       default: return Icons.insert_drive_file_rounded;
     }
   }
@@ -1274,25 +1337,78 @@ class _TreeTileState extends State<_TreeTile> {
     final node = widget.node;
     if (node.isDir) return const Color(0xFFF5A623);
     final lower = node.name.toLowerCase();
-    if (lower == 'package.json') return const Color(0xFFCB3837);
-    if (lower == 'dockerfile') return const Color(0xFF2496ED);
-    if (lower == '.gitignore') return const Color(0xFFF05032);
+    // 文件名级
+    if (lower == 'package.json' || lower == 'package-lock.json' || lower == 'pnpm-lock.yaml' || lower == 'yarn.lock') return const Color(0xFFCB3837);
+    if (lower == 'dockerfile' || lower.endsWith('.dockerfile') || lower == '.dockerignore') return const Color(0xFF2496ED);
+    if (lower == '.gitignore' || lower == '.gitattributes' || lower == '.gitmodules') return const Color(0xFFF05032);
     if (lower.startsWith('pubspec')) return const Color(0xFF54C5F8);
+    if (lower == 'cargo.toml' || lower == 'cargo.lock') return const Color(0xFFCE422B);
+    if (lower == 'go.mod' || lower == 'go.sum') return const Color(0xFF00ADD8);
+    if (lower == 'cmakelists.txt' || lower.endsWith('.cmake')) return const Color(0xFF064F8C);
+    if (lower == 'makefile' || lower == 'gnumakefile') return const Color(0xFF6D4C41);
+    if (lower.startsWith('readme')) return const Color(0xFF42A5F5);
+    if (lower.startsWith('license') || lower.startsWith('licence')) return const Color(0xFF8E63CE);
+    if (lower.endsWith('.gradle') || lower.endsWith('.gradle.kts') || lower == 'gradle.properties' || lower == 'settings.gradle' || lower == 'build.gradle') return const Color(0xFF02303A);
+    if (lower == 'androidmanifest.xml') return const Color(0xFF3DDC84);
+    if (lower.endsWith('.env') || lower == '.env' || lower.startsWith('.env.')) return const Color(0xFFFFD54F);
+
     final ext = lower.contains('.') ? lower.split('.').last : '';
     switch (ext) {
-      case 'dart': return const Color(0xFF54C5F8);
+      case 'dart': return const Color(0xFF02569B);
       case 'js': case 'mjs': case 'cjs': return const Color(0xFFF7DF1E);
-      case 'ts': return const Color(0xFF3178C6);
-      case 'py': return const Color(0xFF3776AB);
+      case 'ts': case 'tsx': return const Color(0xFF3178C6);
+      case 'jsx': return const Color(0xFF61DAFB);
+      case 'vue': return const Color(0xFF42B883);
+      case 'svelte': return const Color(0xFFFF3E00);
+      case 'html': case 'htm': return const Color(0xFFE34F26);
+      case 'css': return const Color(0xFF1572B6);
+      case 'scss': case 'sass': return const Color(0xFFCC6699);
+      case 'less': return const Color(0xFF1D365D);
+      case 'json': case 'json5': case 'jsonc': return const Color(0xFFFAB005);
+      case 'yaml': case 'yml': return const Color(0xFFCB171E);
+      case 'toml': case 'ini': case 'cfg': case 'conf': case 'properties': return const Color(0xFF8E63CE);
+      case 'xml': case 'plist': return const Color(0xFFFF8A50);
+      case 'csv': case 'tsv': return const Color(0xFF1E8E3E);
+      case 'md': case 'markdown': case 'mdx': return const Color(0xFF519ABA);
+      case 'txt': case 'log': return const Color(0xFF9E9E9E);
+      case 'pdf': return const Color(0xFFE53935);
+      case 'doc': case 'docx': return const Color(0xFF2B579A);
+      case 'xls': case 'xlsx': return const Color(0xFF217346);
+      case 'ppt': case 'pptx': return const Color(0xFFD24726);
+      case 'py': case 'pyw': case 'pyi': return const Color(0xFF3776AB);
       case 'java': return const Color(0xFFED8B00);
       case 'kt': case 'kts': return const Color(0xFF7F52FF);
       case 'c': case 'h': return const Color(0xFFA8B9CC);
-      case 'cpp': case 'cc': case 'cxx': case 'hpp': return const Color(0xFF00599C);
-      case 'html': return const Color(0xFFE34F26);
-      case 'css': return const Color(0xFF1572B6);
-      case 'json': case 'yaml': case 'yml': return const Color(0xFF6DB33F);
-      case 'md': return const Color(0xFF519ABA);
-      case 'sh': case 'bash': return const Color(0xFF4EAA25);
+      case 'cpp': case 'cc': case 'cxx': case 'hpp': case 'hxx': return const Color(0xFF00599C);
+      case 'cs': return const Color(0xFF512BD4);
+      case 'rs': return const Color(0xFFCE422B);
+      case 'go': return const Color(0xFF00ADD8);
+      case 'swift': return const Color(0xFFF05138);
+      case 'rb': return const Color(0xFFCC342D);
+      case 'php': return const Color(0xFF777BB4);
+      case 'lua': return const Color(0xFF000080);
+      case 'r': return const Color(0xFF276DC3);
+      case 'scala': return const Color(0xFFDC322F);
+      case 'sql': return const Color(0xFF00758F);
+      case 'sh': case 'bash': case 'zsh': case 'fish': return const Color(0xFF4EAA25);
+      case 'ps1': case 'psm1': return const Color(0xFF012456);
+      case 'bat': case 'cmd': return const Color(0xFF888888);
+      case 'png': case 'jpg': case 'jpeg': case 'gif': case 'webp': case 'bmp': case 'tiff': return const Color(0xFF26A69A);
+      case 'svg': return const Color(0xFFFFB300);
+      case 'ico': return const Color(0xFF7E57C2);
+      case 'ttf': case 'otf': case 'woff': case 'woff2': return const Color(0xFF6A1B9A);
+      case 'mp4': case 'mov': case 'avi': case 'mkv': case 'webm': case 'flv': return const Color(0xFFE91E63);
+      case 'mp3': case 'wav': case 'ogg': case 'flac': case 'm4a': case 'aac': return const Color(0xFF8E24AA);
+      case 'zip': case 'rar': case '7z': case 'tar': case 'gz': case 'bz2': case 'xz': return const Color(0xFFFFA000);
+      case 'apk': case 'aab': return const Color(0xFF3DDC84);
+      case 'ipa': return const Color(0xFF666666);
+      case 'jar': case 'war': case 'aar': return const Color(0xFFED8B00);
+      case 'so': case 'dll': case 'dylib': return const Color(0xFF607D8B);
+      case 'exe': case 'msi': return const Color(0xFF455A64);
+      case 'deb': case 'rpm': case 'dmg': case 'pkg': return const Color(0xFF6D4C41);
+      case 'keystore': case 'jks': case 'pem': case 'p12': case 'pfx': case 'cer': case 'crt': case 'key': return const Color(0xFFD32F2F);
+      case 'gradle': return const Color(0xFF02303A);
+      case 'cmake': return const Color(0xFF064F8C);
       default: return widget.scheme.onSurface.withOpacity(0.50);
     }
   }
