@@ -166,9 +166,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       return;
     }
     if (_buildPollTimer == null) {
-      // 立即拉一次，避免用户等两分钟才看到第一次状态
+      // 立即拉一次，避免用户等太久才看到第一次状态
       _pollBuild(state, build);
-      _buildPollTimer = Timer.periodic(const Duration(minutes: 2), (_) => _pollBuild(state, build));
+      _buildPollTimer = Timer.periodic(const Duration(seconds: 30), (_) => _pollBuild(state, build));
     }
   }
 
