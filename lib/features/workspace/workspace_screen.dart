@@ -1371,23 +1371,10 @@ class _TreeTileState extends State<_TreeTile> {
           color: isSelected
               ? scheme.primary.withOpacity(isDark ? 0.20 : 0.13)
               : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-          border: isSelected
-              ? Border.all(color: scheme.primary.withOpacity(isDark ? 0.45 : 0.34), width: 0.8)
-              : null,
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: scheme.primary.withOpacity(isDark ? 0.28 : 0.20),
-                    blurRadius: 14,
-                    spreadRadius: -1,
-                    offset: const Offset(0, 3),
-                  ),
-                ]
-              : null,
+          borderRadius: BorderRadius.circular(6),
         ),
         child: InkWell(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(6),
           onTap: () => node.isDir ? widget.onToggle(node) : widget.onOpen(node),
           onLongPress: () => widget.onLongPress(node),
           child: SizedBox(
@@ -1396,15 +1383,19 @@ class _TreeTileState extends State<_TreeTile> {
               SizedBox(width: indent),
               SizedBox(width: 16, child: node.isDir
                 ? node.loading
-                  ? SizedBox(
-                      width: 12, height: 12,
-                      child: CircularProgressIndicator(strokeWidth: 1.5, color: scheme.primary),
+                  ? Center(
+                      child: SizedBox(
+                        width: 10, height: 10,
+                        child: CircularProgressIndicator(strokeWidth: 1.5, color: scheme.primary),
+                      ),
                     )
                   : Icon(node.expanded ? Icons.arrow_drop_down_rounded : Icons.arrow_right_rounded, size: 16, color: scheme.onSurface.withOpacity(0.45))
                 : isOpening
-                  ? SizedBox(
-                      width: 12, height: 12,
-                      child: CircularProgressIndicator(strokeWidth: 1.5, color: scheme.primary),
+                  ? Center(
+                      child: SizedBox(
+                        width: 10, height: 10,
+                        child: CircularProgressIndicator(strokeWidth: 1.5, color: scheme.primary),
+                      ),
                     )
                   : null),
               const SizedBox(width: 2),
