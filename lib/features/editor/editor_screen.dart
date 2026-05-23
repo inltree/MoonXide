@@ -5,6 +5,8 @@ import '../../app/mx_widgets.dart';
 import '../../core/services/app_state.dart';
 import '../../core/services/build_center_state.dart';
 import '../../core/services/editor_state.dart';
+import '../../core/ai/ai_api_client.dart';
+import '../../core/ai/ai_config_state.dart';
 
 // ─── 错误波浪线 Painter ───────────────────────────────────────────────────────
 class _WavePainter extends CustomPainter {
@@ -219,15 +221,91 @@ class EditorScreenState extends State<EditorScreen> {
     );
     if (!confirmed || !context.mounted) return;
     
-    // TODO: 实现 AI 流式修复逻辑
-    // 1. 提取错误上下文（当前文件内容 + 错误信息）
-    // 2. 调用 AI 流式 API
-    // 3. 流式回写代码
-    // 4. 显示局部魔法动画
+    final appState = context.read<AppState>();
+    final aiConfigState = context.read<AiConfigState>();
+    final aiConfig = aiConfigState.config;
+    if (aiConfig.baseUrl.trim().isEmpty || aiConfig.apiKey.trim().isEmpty) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('请先配置 AI 接口设置')),
+        );
+      }
+      return;
+    }
     
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('AI 修复功能开发中，敬请期待')),
-    );
+    // 提取错误上下文：当前文件内容 + 错误信息
+    final fileContent = editor.currentContent;
+    final fileName = editor.currentPath.split('/').last;
+    final language = editor.language;
+    
+    final prompt = '''请修复以下 $language 文件中的错误。
+
+文件名: $fileName
+错误信息: ${diag.severity}: ${diag.message}
+
+当前代码:
+```$language
+$fileContent
+```
+
+请只返回修复后的完整代码，不要包含任何解释。''';
+    
+    // 显示修复动画 overlay
+    setState(() => _showRepairOverlay = true);
+    final stream = AiApiClient().sendStream(aiConfig, prompt);
+    final buffer = StringBuffer();
+    
+    try {
+      await for (final chunk in stream) {
+        buffer.write(chunk);
+        // 流式更新编辑器内容
+        final newContent = _extractCode(buffer.toString(), language);
+        if (newContent != null) {
+          contentController.text = newContent;
+          editor.updateContent(newContent);
+        }
+      }
+      // 最终提取代码
+      final finalContent = _extractCode(buffer.toString(), language) ?? buffer.toString();
+      contentController.text = finalContent;
+      editor.updateContent(finalContent);
+      
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(children: [
+              Icon(Icons.check_circle_rounded, size: 18, color: Colors.white),
+              SizedBox(width: 8),
+              Text('AI 修复完成'),
+            ]),
+            backgroundColor: Color(0xFF1E8E3E),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('AI 修复失败: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _showRepairOverlay = false);
+    }
+  }
+
+  bool _showRepairOverlay = false;
+
+  /// 从 AI 返回文本中提取代码块
+  String? _extractCode(String text, String language) {
+    // 尝试匹配 ```language ... ``` 格式
+    final pattern = RegExp('```$language\\n(.+?)```', dotAll: true);
+    final match = pattern.firstMatch(text);
+    if (match != null) return match.group(1);
+    // 尝试匹配 ``` ... ``` 格式
+    final genericPattern = RegExp('```\\n(.+?)```', dotAll: true);
+    final genericMatch = genericPattern.firstMatch(text);
+    if (genericMatch != null) return genericMatch.group(1);
+    return null;
   }
 
   // ── 构建 ────────────────────────────────────────────────────────────────────
@@ -502,6 +580,60 @@ class _ErrorTapLayer extends StatelessWidget {
           ),
         );
       }).toList(),
+    );
+  }
+}
+
+// ─── 修复动画 overlay ─────────────────────────────────────────────────────────
+class _RepairOverlay extends StatefulWidget {
+  const _RepairOverlay();
+  @override
+  State<_RepairOverlay> createState() => _RepairOverlayState();
+}
+
+class _RepairOverlayState extends State<_RepairOverlay> with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _opacity;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 600));
+    _opacity = Tween(begin: 0.0, end: 1.0).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
+    _ctrl.repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned.fill(
+      child: FadeTransition(
+        opacity: _opacity,
+        child: Container(
+          color: Colors.black.withOpacity(0.08),
+          child: Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0A1929).withOpacity(0.88),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFF54C5F8).withOpacity(0.45)),
+                boxShadow: [BoxShadow(color: const Color(0xFF54C5F8).withOpacity(0.18), blurRadius: 16)],
+              ),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation(const Color(0xFF54C5F8)))),
+                const SizedBox(width: 12),
+                Text('AI 正在修复…', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: const Color(0xFF54C5F8))),
+              ]),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

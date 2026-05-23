@@ -70,4 +70,53 @@ class AiApiClient {
     }
     return response.body;
   }
+
+  /// 流式调用 AI API，返回逐 token 的 Stream<String>
+  Stream<String> sendStream(AiProviderConfig config, String text) async* {
+    final streamConfig = config.copyWith(stream: true);
+    final url = normalizer.actualUrl(baseUrl: streamConfig.baseUrl, endpointPath: streamConfig.endpointPath, mode: streamConfig.mode);
+    final headers = <String, String>{'Content-Type': 'application/json'};
+    if (streamConfig.apiKey.trim().isNotEmpty) headers['Authorization'] = 'Bearer ${streamConfig.apiKey.trim()}';
+    if (streamConfig.mode == AiApiMode.anthropicMessages) {
+      headers['anthropic-version'] = '2023-06-01';
+      if (streamConfig.apiKey.trim().isNotEmpty) headers['x-api-key'] = streamConfig.apiKey.trim();
+    }
+    final body = builder.buildBody(streamConfig, text);
+    final request = http.Request('POST', Uri.parse(url));
+    request.headers.addAll(headers);
+    request.body = jsonEncode(body);
+    final streamedResponse = await client.send(request);
+    
+    if (streamedResponse.statusCode < 200 || streamedResponse.statusCode >= 300) {
+      final bodyStr = await streamedResponse.stream.bytesToString();
+      throw Exception('AI 流式请求失败 ${streamedResponse.statusCode}: $bodyStr');
+    }
+    
+    final buffer = StringBuffer();
+    await for (final chunk in streamedResponse.stream.transform(utf8.decoder)) {
+      buffer.write(chunk);
+      final lines = buffer.toString().split('\n');
+      buffer.clear();
+      if (lines.isNotEmpty && lines.last.isNotEmpty) {
+        buffer.write(lines.removeLast());
+      }
+      for (final line in lines) {
+        if (line.startsWith('data: ')) {
+          final data = line.substring(6).trim();
+          if (data == '[DONE]') return;
+          try {
+            final json = jsonDecode(data);
+            final choices = json['choices'] as List?;
+            if (choices != null && choices.isNotEmpty) {
+              final delta = choices.first['delta'] as Map?;
+              final content = delta?['content'] as String?;
+              if (content != null && content.isNotEmpty) {
+                yield content;
+              }
+            }
+          } catch (_) {}
+        }
+      }
+    }
+  }
 }
