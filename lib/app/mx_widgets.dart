@@ -161,6 +161,7 @@ class MxDropdown<T> extends StatelessWidget {
           icon: Icon(Icons.expand_more_rounded, color: scheme.primary),
           dropdownColor: isDark ? const Color(0xFF0F2230) : Colors.white,
           borderRadius: BorderRadius.circular(12),
+          isExpanded: true,
           items: items
               .map((e) => DropdownMenuItem<T>(
                     value: e.value,
@@ -171,12 +172,6 @@ class MxDropdown<T> extends StatelessWidget {
                   ))
               .toList(),
           onChanged: onChanged,
-        ),
-      ),
-    );
-  }
-}
-          isExpanded: true,
         ),
       ),
     );
