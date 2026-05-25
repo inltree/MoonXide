@@ -67,9 +67,7 @@ class AiWorkflowEngine extends ChangeNotifier {
         // 真实执行：调用注入的 AI + 工具链
         result = await _executor!(step.title, step.detail, plan.goal);
       } else {
-        // 降级：无执行器时给出提示
-        await Future.delayed(const Duration(milliseconds: 300));
-        result = '${step.title}：请先在 AI 对话中发送任务以激活执行器。';
+        throw StateError('未连接 AI 对话执行器，请先从 AI 对话页发送任务。');
       }
       _updateStep(index, step.copyWith(status: AiTaskStepStatus.completed, result: result));
       eventLog = '$eventLog\n✓ ${step.title}';

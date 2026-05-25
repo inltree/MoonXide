@@ -13,10 +13,16 @@ class AiToolExecutor {
 
   // 工具定义（发给 AI 的 system prompt 附加部分）
   static const String toolsDescription = '''
-你可以调用以下工具，格式为 JSON 代码块：
+你可以调用以下真实工具，格式必须是单个 JSON 代码块：
 ```json
 {"tool": "<工具名>", "args": {<参数>}}
 ```
+
+重要规则：
+- 不要编造文件、编译结果、接口结果或执行结果；需要事实时必须先调用工具读取/列出/搜索。
+- 写文件前先 read_file 或 list_files 确认路径和现状；不知道路径时先 list_files。
+- 工具调用只描述要执行的真实操作，不要把自然语言说明混进 JSON。
+- 如果没有足够信息，先调用 list_files / read_file / search_code。
 
 可用工具：
 - read_file: 读取仓库文件内容。args: {"path": "文件路径"}

@@ -27,7 +27,6 @@ class _ChatScreenState extends State<ChatScreen> {
   final _inputCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
   final List<AiToolCall> _toolCalls = [];
-  bool _showPlan = true;
   bool _autoApproveTools = false;
 
   @override
@@ -47,7 +46,7 @@ class _ChatScreenState extends State<ChatScreen> {
     workflow.setExecutor((title, detail, goal) async {
       final cfg = aiConfig.config;
       if (cfg.baseUrl.trim().isEmpty || cfg.apiKey.trim().isEmpty) return '未配置 AI，跳过步骤。';
-      final stepPrompt = '你正在执行开发任务的一个步骤。\n\n总目标：$goal\n当前步骤：$title\n步骤说明：$detail\n\n${AiToolExecutor.toolsDescription}\n\n请执行此步骤，如需操作仓库请输出工具调用 JSON，否则直接给出分析结论。';
+      final stepPrompt = '你正在执行开发任务的一个步骤。必须基于真实上下文行动，不要编造文件、编译结果或工具结果。\n\n总目标：$goal\n当前步骤：$title\n步骤说明：$detail\n\n${AiToolExecutor.toolsDescription}\n\n请完成此步骤：需要仓库/代码事实时先输出工具调用 JSON；已有足够信息时直接给出真实结论。';
       final cfgStep = cfg.copyWith(systemPrompt: stepPrompt, stream: false);
       try {
         final raw = await AiApiClient().sendWithHistory(cfgStep, [], goal);
@@ -87,7 +86,7 @@ class _ChatScreenState extends State<ChatScreen> {
             .where((m) => !m.taskOpen)
             .map((m) => {'role': m.role == ChatRole.user ? 'user' : 'assistant', 'content': m.content})
             .toList();
-        final toolPrompt = '${cfg.systemPrompt}\n\n${AiToolExecutor.toolsDescription}\n如果需要修改、读取、搜索或操作仓库，请先输出工具调用 JSON。';
+        final toolPrompt = '${cfg.systemPrompt}\n\n${AiToolExecutor.toolsDescription}\n必须基于真实工具返回继续，禁止虚构文件内容、构建结果或仓库状态。';
         final cfgWithTools = cfg.copyWith(systemPrompt: toolPrompt);
         final rawBody = await AiApiClient().sendWithHistory(cfgWithTools, history, text);
         final reply = _extractReply(rawBody, cfg.stream);
@@ -261,6 +260,66 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  String _planProgressText(dynamic plan) {
+    if (plan == null || plan.steps.isEmpty) return '0/0';
+    final steps = plan.steps as List;
+    final active = steps.indexWhere((e) => e.status == AiTaskStepStatus.running);
+    if (active >= 0) return '${active + 1}/${steps.length}';
+    final done = steps.where((e) => e.status == AiTaskStepStatus.completed).length;
+    return '${done.clamp(0, steps.length)}/${steps.length}';
+  }
+
+  Future<void> _showPlanSheet(AiWorkflowEngine workflow) async {
+    final plan = workflow.currentPlan;
+    if (plan == null) return;
+    final scheme = Theme.of(context).colorScheme;
+    await MxBottomSheet.show(
+      context,
+      title: '任务执行',
+      children: [
+        _PlanCard(
+          plan: plan,
+          workflow: workflow,
+          scheme: scheme,
+          stepIcon: _stepIcon,
+          stepColor: _stepColor,
+          compact: false,
+        ),
+        const SizedBox(height: 10),
+        Row(children: [
+          Expanded(
+            child: MxButton(
+              label: workflow.running ? '暂停' : '继续',
+              icon: workflow.running ? Icons.pause_rounded : Icons.play_arrow_rounded,
+              filled: false,
+              onPressed: () {
+                if (workflow.running) {
+                  workflow.pause();
+                } else {
+                  workflow.resume();
+                }
+                Navigator.pop(context);
+              },
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: MxButton(
+              label: '重置',
+              icon: Icons.refresh_rounded,
+              filled: false,
+              color: scheme.error,
+              onPressed: () {
+                workflow.reset();
+                Navigator.pop(context);
+              },
+            ),
+          ),
+        ]),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final chat = context.watch<ChatConversationState>();
@@ -274,17 +333,13 @@ class _ChatScreenState extends State<ChatScreen> {
       Padding(
         padding: const EdgeInsets.fromLTRB(12, 4, 10, 4),
         child: Row(children: [
-          MxIconBtn(icon: _showPlan ? Icons.account_tree_rounded : Icons.account_tree_outlined, onPressed: () => setState(() => _showPlan = !_showPlan), active: _showPlan && plan != null, tooltip: '任务规划', size: 34),
-          const SizedBox(width: 4),
           _ToolModeChip(value: _autoApproveTools, onChanged: (v) => setState(() => _autoApproveTools = v)),
           const Spacer(),
           MxIconBtn(icon: Icons.add_comment_rounded, onPressed: chat.newConversation, tooltip: '新对话', size: 34),
           MxIconBtn(icon: Icons.manage_search_rounded, onPressed: () => _showHistory(chat), tooltip: '历史', size: 34),
           MxIconBtn(icon: Icons.undo_rounded, onPressed: chat.rollbackLastMessage, tooltip: '撤回', size: 34),
-          MxIconBtn(icon: Icons.refresh_rounded, onPressed: workflow.reset, tooltip: '重置任务', size: 34),
         ]),
       ),
-      if (_showPlan && plan != null) _PlanCard(plan: plan, workflow: workflow, scheme: scheme, stepIcon: _stepIcon, stepColor: _stepColor),
       if (_toolCalls.isNotEmpty)
         SizedBox(
           height: 118,
@@ -319,15 +374,64 @@ class _ChatScreenState extends State<ChatScreen> {
       SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(10, 4, 10, 10),
-          child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-            Expanded(child: MxTextField(controller: _inputCtrl, hint: '输入开发任务，AI 可规划并调用工具…', minLines: 1, maxLines: 5, keyboardType: TextInputType.multiline)),
-            const SizedBox(width: 7),
-            MxIconBtn(icon: chat.busy ? Icons.hourglass_top_rounded : Icons.send_rounded, onPressed: chat.busy ? null : () => _send(chat, aiConfig, workflow), active: true, size: 42),
-          ]),
+          padding: const EdgeInsets.fromLTRB(10, 2, 10, 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (plan != null) ...[
+                _PlanCapsule(
+                  label: _planProgressText(plan),
+                  running: workflow.running,
+                  finished: plan.finished,
+                  onTap: () => _showPlanSheet(workflow),
+                ),
+                const SizedBox(height: 6),
+              ],
+              Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                Expanded(child: MxTextField(controller: _inputCtrl, hint: '输入开发任务，AI 可规划并调用工具…', minLines: 1, maxLines: 5, keyboardType: TextInputType.multiline)),
+                const SizedBox(width: 7),
+                MxIconBtn(icon: chat.busy ? Icons.hourglass_top_rounded : Icons.send_rounded, onPressed: chat.busy ? null : () => _send(chat, aiConfig, workflow), active: true, size: 42),
+              ]),
+            ],
+          ),
         ),
       ),
     ]);
+  }
+}
+
+class _PlanCapsule extends StatelessWidget {
+  const _PlanCapsule({required this.label, required this.running, required this.finished, required this.onTap});
+  final String label;
+  final bool running;
+  final bool finished;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final color = finished ? Colors.green : (running ? scheme.primary : Colors.orange);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.12),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: color.withOpacity(0.36)),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(finished ? Icons.check_circle_rounded : (running ? Icons.autorenew_rounded : Icons.account_tree_rounded), size: 13, color: color),
+            const SizedBox(width: 5),
+            Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: color)),
+          ]),
+        ),
+      ),
+    );
   }
 }
 
@@ -392,26 +496,64 @@ class _ToolCallCard extends StatelessWidget {
 }
 
 class _PlanCard extends StatelessWidget {
-  const _PlanCard({required this.plan, required this.workflow, required this.scheme, required this.stepIcon, required this.stepColor});
+  const _PlanCard({
+    required this.plan,
+    required this.workflow,
+    required this.scheme,
+    required this.stepIcon,
+    required this.stepColor,
+    this.compact = true,
+  });
   final dynamic plan;
   final AiWorkflowEngine workflow;
   final ColorScheme scheme;
   final IconData Function(AiTaskStepStatus) stepIcon;
   final Color Function(BuildContext, AiTaskStepStatus) stepColor;
+  final bool compact;
+
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
-    child: MxCard(
-      padding: const EdgeInsets.all(12),
+  Widget build(BuildContext context) {
+    final body = MxCard(
+      padding: EdgeInsets.all(compact ? 12 : 14),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [Icon(Icons.auto_awesome_rounded, size: 15, color: scheme.primary), const SizedBox(width: 6), Expanded(child: Text(plan.goal, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13))), MxBadge(plan.finished ? '已完成' : (workflow.running ? '执行中' : '已暂停'), color: plan.finished ? Colors.green : (workflow.running ? scheme.primary : Colors.orange))]),
+        Row(children: [
+          Icon(Icons.auto_awesome_rounded, size: 15, color: scheme.primary),
+          const SizedBox(width: 6),
+          Expanded(child: Text(plan.goal, maxLines: compact ? 1 : 3, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13))),
+          MxBadge(plan.finished ? '已完成' : (workflow.running ? '执行中' : '已暂停'), color: plan.finished ? Colors.green : (workflow.running ? scheme.primary : Colors.orange)),
+        ]),
         const SizedBox(height: 8),
-        ClipRRect(borderRadius: BorderRadius.circular(4), child: LinearProgressIndicator(value: plan.steps.isEmpty ? 0 : plan.steps.where((e) => e.status == AiTaskStepStatus.completed).length / plan.steps.length, minHeight: 3, backgroundColor: scheme.primary.withOpacity(0.10))),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: LinearProgressIndicator(
+            value: plan.steps.isEmpty ? 0 : plan.steps.where((e) => e.status == AiTaskStepStatus.completed).length / plan.steps.length,
+            minHeight: 3,
+            backgroundColor: scheme.primary.withOpacity(0.10),
+          ),
+        ),
         const SizedBox(height: 8),
-        ...plan.steps.map<Widget>((step) => Padding(padding: const EdgeInsets.symmetric(vertical: 2), child: Row(children: [Icon(stepIcon(step.status), size: 13, color: stepColor(context, step.status)), const SizedBox(width: 7), Expanded(child: Text(step.title, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: scheme.onSurface.withOpacity(0.72))))]))),
+        ...plan.steps.map<Widget>((step) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 3),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Icon(stepIcon(step.status), size: 14, color: stepColor(context, step.status)),
+            const SizedBox(width: 7),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(step.title, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: scheme.onSurface.withOpacity(0.76))),
+              if (!compact) ...[
+                const SizedBox(height: 2),
+                Text(step.detail, style: TextStyle(fontSize: 11, height: 1.35, color: scheme.onSurface.withOpacity(0.56))),
+                if ((step.result ?? '').toString().trim().isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text((step.result ?? '').toString(), maxLines: 3, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 10, height: 1.35, color: scheme.onSurface.withOpacity(0.48))),
+                ],
+              ],
+            ])),
+          ]),
+        )),
       ]),
-    ),
-  );
+    );
+    return compact ? Padding(padding: const EdgeInsets.fromLTRB(12, 0, 12, 4), child: body) : body;
+  }
 }
 
 class _Bubble extends StatefulWidget {
