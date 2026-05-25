@@ -10,56 +10,126 @@ import '../../core/ai/ai_config_state.dart';
 
 // ─── 错误波浪线 Painter ───────────────────────────────────────────────────────
 class _WavePainter extends CustomPainter {
-  _WavePainter({required this.text, required this.diagnostics, required this.baseStyle});
+  _WavePainter({
+    required this.text,
+    required this.diagnostics,
+    required this.baseStyle,
+    required this.scrollOffset,
+  });
   final String text;
   final List<EditorDiagnostic> diagnostics;
   final TextStyle baseStyle;
+  final double scrollOffset;
+
+  double get _lineHeight => (baseStyle.fontSize ?? 13) * (baseStyle.height ?? 1.55);
 
   @override
   void paint(Canvas canvas, Size size) {
     if (diagnostics.isEmpty || text.isEmpty) return;
     final lines = text.split('\n');
-    const lineH = 21.7; // 与行号栏行高一致
     const padTop = 2.0;
     const padLeft = 10.0;
 
     for (final d in diagnostics) {
       if (d.severity != 'error' && d.severity != 'warning') continue;
-      final color = d.severity == 'error' ? Colors.red : Colors.orange;
-      // 简单策略：在每行底部画波浪线（对有问题的行）
-      // 这里对所有行画，实际可按行号精确定位
-      for (var i = 0; i < lines.length; i++) {
-        final line = lines[i];
-        if (line.trim().isEmpty) continue;
-        // 只对包含问题关键词的行画波浪线
-        final hasIssue = d.message.contains('{') || d.message.contains('(') || d.message.contains('[');
-        if (!hasIssue) continue;
-        final y = padTop + (i + 1) * lineH - 2;
-        if (y > size.height) break;
-        final paint = Paint()
-          ..color = color.withOpacity(0.75)
-          ..strokeWidth = 1.2
-          ..style = PaintingStyle.stroke;
-        final path = Path();
-        const waveW = 4.0;
-        const waveH = 2.0;
-        final lineW = (line.length * 7.5).clamp(20.0, size.width - padLeft - 12);
-        path.moveTo(padLeft, y);
-        var x = padLeft;
-        var up = true;
-        while (x < padLeft + lineW) {
-          path.relativeQuadraticBezierTo(waveW / 2, up ? -waveH : waveH, waveW, 0);
-          x += waveW;
-          up = !up;
-        }
-        canvas.drawPath(path, paint);
-        break; // 每个诊断只画一行
+      final lineIndex = (d.line ?? 1) - 1;
+      if (lineIndex < 0 || lineIndex >= lines.length) continue;
+      final line = lines[lineIndex];
+      if (line.trim().isEmpty) continue;
+
+      final y = padTop - scrollOffset + (lineIndex + 1) * _lineHeight - 2;
+      if (y < 0 || y > size.height) continue;
+      final paint = Paint()
+        ..color = (d.severity == 'error' ? Colors.red : Colors.orange).withOpacity(0.75)
+        ..strokeWidth = 1.2
+        ..style = PaintingStyle.stroke;
+      final path = Path();
+      const waveW = 4.0;
+      const waveH = 2.0;
+      final lineW = (line.length * 7.5).clamp(20.0, size.width - padLeft - 12);
+      path.moveTo(padLeft, y);
+      var x = padLeft;
+      var up = true;
+      while (x < padLeft + lineW) {
+        path.relativeQuadraticBezierTo(waveW / 2, up ? -waveH : waveH, waveW, 0);
+        x += waveW;
+        up = !up;
       }
+      canvas.drawPath(path, paint);
     }
   }
 
   @override
-  bool shouldRepaint(_WavePainter old) => old.text != text || old.diagnostics != diagnostics;
+  bool shouldRepaint(_WavePainter old) =>
+      old.text != text || old.diagnostics != diagnostics || old.scrollOffset != scrollOffset;
+}
+
+class _LineNumberGutter extends StatelessWidget {
+  const _LineNumberGutter({
+    required this.lineCount,
+    required this.scrollController,
+    required this.backgroundColor,
+    required this.textColor,
+    required this.textStyle,
+  });
+
+  final int lineCount;
+  final ScrollController scrollController;
+  final Color backgroundColor;
+  final Color textColor;
+  final TextStyle textStyle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 36,
+      color: backgroundColor,
+      child: AnimatedBuilder(
+        animation: scrollController,
+        builder: (_, __) => CustomPaint(
+          painter: _LineNumberPainter(
+            lineCount: lineCount,
+            scrollOffset: scrollController.hasClients ? scrollController.offset : 0,
+            textColor: textColor,
+            textStyle: textStyle,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LineNumberPainter extends CustomPainter {
+  _LineNumberPainter({
+    required this.lineCount,
+    required this.scrollOffset,
+    required this.textColor,
+    required this.textStyle,
+  });
+
+  final int lineCount;
+  final double scrollOffset;
+  final Color textColor;
+  final TextStyle textStyle;
+
+  double get _lineHeight => (textStyle.fontSize ?? 13) * (textStyle.height ?? 1.55);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final first = (scrollOffset / _lineHeight).floor().clamp(0, lineCount - 1);
+    final visible = (size.height / _lineHeight).ceil() + 2;
+    final painter = TextPainter(textAlign: TextAlign.right, textDirection: TextDirection.ltr);
+    for (var i = first; i < lineCount && i < first + visible; i++) {
+      painter.text = TextSpan(text: '${i + 1}', style: textStyle.copyWith(color: textColor));
+      painter.layout(minWidth: 0, maxWidth: size.width - 6);
+      final y = 2 - scrollOffset + i * _lineHeight;
+      painter.paint(canvas, Offset(size.width - painter.width - 4, y));
+    }
+  }
+
+  @override
+  bool shouldRepaint(_LineNumberPainter old) =>
+      old.lineCount != lineCount || old.scrollOffset != scrollOffset || old.textColor != textColor || old.textStyle != textStyle;
 }
 class EditorScreen extends StatefulWidget {
   const EditorScreen({super.key});
@@ -76,7 +146,18 @@ class EditorScreenState extends State<EditorScreen> {
   bool showFind = false;
 
   @override
+  void initState() {
+    super.initState();
+    _editorScroll.addListener(_onEditorScroll);
+  }
+
+  void _onEditorScroll() {
+    if (mounted) setState(() {});
+  }
+
+  @override
   void dispose() {
+    _editorScroll.removeListener(_onEditorScroll);
     contentController.dispose();
     searchController.dispose();
     replaceController.dispose();
@@ -370,28 +451,12 @@ $fileContent
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               // 行号栏
-              Container(
-                width: 36,
-                color: gutterBg,
-                child: ListView.builder(
-                  padding: EdgeInsets.zero,
-                  itemCount: lineCount,
-                  itemBuilder: (_, i) => SizedBox(
-                    height: 21.7,
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: Padding(
-                        padding: const EdgeInsets.only(right: 4),
-                        child: Text('${i + 1}',
-                            style: TextStyle(
-                                fontFamily: 'monospace',
-                                fontSize: 13,
-                                height: 1.55,
-                                color: gutterText)),
-                      ),
-                    ),
-                  ),
-                ),
+              _LineNumberGutter(
+                lineCount: lineCount,
+                scrollController: _editorScroll,
+                backgroundColor: gutterBg,
+                textColor: gutterText,
+                textStyle: contentController.baseStyle,
               ),
 
               // 代码区（横向可滚动 + 错误波浪线 overlay + 错误点击区域）
@@ -437,6 +502,7 @@ $fileContent
                               text: contentController.text,
                               diagnostics: diagnostics,
                               baseStyle: contentController.baseStyle,
+                              scrollOffset: _editorScroll.hasClients ? _editorScroll.offset : 0,
                             ),
                           ),
                         ),
@@ -447,6 +513,8 @@ $fileContent
                         child: _ErrorTapLayer(
                           text: contentController.text,
                           diagnostics: diagnostics,
+                          scrollOffset: _editorScroll.hasClients ? _editorScroll.offset : 0,
+                          baseStyle: contentController.baseStyle,
                           onTapError: (diag) => _handleErrorTap(context, diag, editor),
                         ),
                       ),
@@ -548,31 +616,34 @@ class _ErrorTapLayer extends StatelessWidget {
   const _ErrorTapLayer({
     required this.text,
     required this.diagnostics,
+    required this.scrollOffset,
+    required this.baseStyle,
     required this.onTapError,
   });
   final String text;
   final List<EditorDiagnostic> diagnostics;
+  final double scrollOffset;
+  final TextStyle baseStyle;
   final ValueChanged<EditorDiagnostic> onTapError;
+
+  double get _lineHeight => (baseStyle.fontSize ?? 13) * (baseStyle.height ?? 1.55);
 
   @override
   Widget build(BuildContext context) {
     if (diagnostics.isEmpty || text.isEmpty) return const SizedBox.shrink();
     final lines = text.split('\n');
-    const lineH = 21.7;
     const padTop = 2.0;
-    
+
     return Stack(
-      children: diagnostics.asMap().entries.map((entry) {
-        final idx = entry.key;
-        final diag = entry.value;
-        // 简单策略：为每个诊断在第一行创建点击区域
-        if (idx >= lines.length) return const SizedBox.shrink();
-        final y = padTop + idx * lineH;
+      children: diagnostics.map((diag) {
+        final lineIndex = (diag.line ?? 1) - 1;
+        if (lineIndex < 0 || lineIndex >= lines.length) return const SizedBox.shrink();
+        final y = padTop - scrollOffset + lineIndex * _lineHeight;
         return Positioned(
           left: 10,
           top: y,
           width: 600,
-          height: lineH,
+          height: _lineHeight,
           child: GestureDetector(
             behavior: HitTestBehavior.translucent,
             onTap: () => onTapError(diag),

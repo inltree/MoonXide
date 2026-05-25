@@ -1,9 +1,10 @@
 import 'package:flutter/foundation.dart';
 
 class EditorDiagnostic {
-  const EditorDiagnostic({required this.message, required this.severity});
+  const EditorDiagnostic({required this.message, required this.severity, this.line});
   final String message;
   final String severity;
+  final int? line;
 }
 
 class EditorState extends ChangeNotifier {
@@ -131,20 +132,22 @@ class EditorState extends ChangeNotifier {
   List<EditorDiagnostic> _diagnose(String text) {
     final issues = <EditorDiagnostic>[];
     if (text.isEmpty) return issues;
-    final pairs = {'(': ')', '[': ']', '{': '}'};
-    for (final e in pairs.entries) {
-      final a = RegExp(RegExp.escape(e.key)).allMatches(text).length;
-      final b = RegExp(RegExp.escape(e.value)).allMatches(text).length;
-      if (a != b) issues.add(EditorDiagnostic(message: '${e.key}${e.value} 数量不匹配：$a / $b', severity: 'warning'));
-    }
+
     if (language == 'json') {
       final t = text.trim();
       if (!(t.startsWith('{') && t.endsWith('}')) && !(t.startsWith('[') && t.endsWith(']'))) {
-        issues.add(const EditorDiagnostic(message: 'JSON 应以 { } 或 [ ] 包裹', severity: 'error'));
+        issues.add(const EditorDiagnostic(message: 'JSON 应以 { } 或 [ ] 包裹', severity: 'error', line: 1));
       }
     }
-    if ((language == 'dart' || language == 'java' || language == 'javascript' || language == 'typescript' || language == 'kotlin') && text.contains('\t')) {
-      issues.add(const EditorDiagnostic(message: '检测到 Tab 缩进，建议统一为空格', severity: 'info'));
+
+    if ((language == 'dart' ||
+            language == 'java' ||
+            language == 'javascript' ||
+            language == 'typescript' ||
+            language == 'kotlin') &&
+        text.contains('\t')) {
+      final line = text.split('\n').indexWhere((l) => l.contains('\t')) + 1;
+      issues.add(EditorDiagnostic(message: '检测到 Tab 缩进，建议统一为空格', severity: 'info', line: line));
     }
     return issues;
   }
