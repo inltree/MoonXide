@@ -290,6 +290,13 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     }
   }
 
+  Future<void> _safePopOverlay() async {
+    if (!mounted) return;
+    final nav = Navigator.of(context);
+    if (nav.canPop()) nav.pop();
+    await Future<void>.delayed(const Duration(milliseconds: 80));
+  }
+
   void _showFileMenu(_TreeNode node) {
     final scheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
