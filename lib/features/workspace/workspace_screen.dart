@@ -6,7 +6,6 @@ import '../../app/mx_widgets.dart';
 import '../../core/services/app_state.dart';
 import '../../core/services/editor_state.dart';
 import '../../core/services/local_file_upload_service.dart';
-import '../project_identity/project_identity_screen.dart';
 
 class _TreeNode {
   final String name;
@@ -61,393 +60,6 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
   final _renameCtrl = TextEditingController();
   bool _private = true;
   bool _autoInit = true;
-  String _selectedTemplate = 'none';
-
-  // ── 内置模板定义 ──────────────────────────────────────────────────────────
-  static const _templates = {
-    'none': {'label': '空仓库（不推送模板）', 'icon': Icons.folder_outlined},
-    'flutter': {'label': 'Flutter / Dart 应用', 'icon': Icons.flutter_dash},
-    'android_kotlin': {'label': 'Android Kotlin 应用', 'icon': Icons.android_rounded},
-    'android_java': {'label': 'Android Java 应用', 'icon': Icons.local_cafe_rounded},
-    'cpp_native': {'label': 'C/C++ 原生可执行', 'icon': Icons.memory_rounded},
-  };
-// GitHub Actions 工作流模板：按项目类型生成，不能所有模板都走 Flutter
-  String _workflowPathForTemplate(String tpl) {
-    switch (tpl) {
-      case 'cpp_native':
-        return '.github/workflows/cmake.yml';
-      case 'flutter':
-      case 'android_kotlin':
-      case 'android_java':
-        return '.github/workflows/android-apk.yml';
-      default:
-        return '.github/workflows/build.yml';
-    }
-  }
-
-  String _workflowForTemplate(String tpl, String repoName) {
-    switch (tpl) {
-      case 'android_kotlin':
-      case 'android_java':
-        return _androidGradleWorkflow(repoName);
-      case 'cpp_native':
-        return _cppWorkflow(repoName);
-      case 'flutter':
-      default:
-        return _flutterWorkflow(repoName);
-    }
-  }
-
-  String _flutterWorkflow(String repoName) => '''
-name: Build APK
-on:
-  push:
-    branches: [main, master]
-  workflow_dispatch:
-    inputs:
-      build_type:
-        description: 'Build type (debug/release)'
-        required: false
-        default: 'debug'
-        type: choice
-        options: [debug, release]
-      publish_release:
-        description: 'Publish as GitHub Release'
-        required: false
-        default: 'false'
-        type: choice
-        options: ['false', 'true']
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.x'
-          channel: stable
-      - name: Generate Android platform
-        run: flutter create --platforms=android . || true
-      - name: Install dependencies
-        run: flutter pub get
-      - name: Build APK
-        run: |
-          if [ "\${{ github.event.inputs.build_type }}" = "release" ]; then
-            flutter build apk --release --no-tree-shake-icons
-          else
-            flutter build apk --debug --no-tree-shake-icons
-          fi
-      - uses: actions/upload-artifact@v4
-        with:
-          name: $repoName-apk
-          path: build/app/outputs/flutter-apk/*.apk
-''';
-
-  String _androidGradleWorkflow(String repoName) => '''
-name: Build APK
-on:
-  push:
-    branches: [main, master]
-  workflow_dispatch:
-    inputs:
-      build_type:
-        description: 'Build type (debug/release)'
-        required: false
-        default: 'debug'
-        type: choice
-        options: [debug, release]
-      publish_release:
-        description: 'Publish as GitHub Release'
-        required: false
-        default: 'false'
-        type: choice
-        options: ['false', 'true']
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-      - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.7'
-      - name: Build APK
-        run: |
-          if [ "\${{ github.event.inputs.build_type }}" = "release" ]; then
-            gradle assembleRelease
-          else
-            gradle assembleDebug
-          fi
-      - uses: actions/upload-artifact@v4
-        with:
-          name: $repoName-apk
-          path: app/build/outputs/apk/**/*.apk
-''';
-
-  String _cppWorkflow(String repoName) => '''
-name: Build Native
-on:
-  push:
-    branches: [main, master]
-  workflow_dispatch:
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Configure CMake
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-      - name: Build
-        run: cmake --build build --config Release
-      - name: Package executable only
-        run: |
-          set -e
-          mkdir -p dist
-          BIN="build/$repoName"
-          if [ ! -f "\$BIN" ]; then
-            BIN="\$(find build -maxdepth 3 -type f -executable ! -path '*/CMakeFiles/*' | head -n 1)"
-          fi
-          if [ -z "\$BIN" ] || [ ! -f "\$BIN" ]; then
-            echo "No executable binary found under build/"
-            find build -maxdepth 4 -type f | sort
-            exit 1
-          fi
-          cp "\$BIN" "dist/$repoName-linux-x64"
-          chmod +x "dist/$repoName-linux-x64"
-          file "dist/$repoName-linux-x64"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: $repoName-linux-x64
-          path: dist/$repoName-linux-x64
-          if-no-files-found: error
-''';
-
-
-  // 模板文件内容
-  Map<String, String> _templateFiles(String tpl, String repoName) {
-    switch (tpl) {
-      case 'flutter':
-        return {
-          'pubspec.yaml': '''name: ${repoName.replaceAll('-', '_').toLowerCase()}
-description: A Flutter application.
-version: 1.0.0+1
-environment:
-  sdk: ">=3.0.0 <4.0.0"
-dependencies:
-  flutter:
-    sdk: flutter
-flutter:
-  uses-material-design: true
-''',
-          'lib/main.dart': '''import 'package:flutter/material.dart';
-
-void main() => runApp(const MyApp());
-
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: '$repoName',
-      home: Scaffold(
-        appBar: AppBar(title: const Text('$repoName')),
-        body: const Center(child: Text('Hello, World!')),
-      ),
-    );
-  }
-}
-''',
-          'README.md': '# $repoName\n\nA Flutter application.\n',
-        };
-      case 'android_kotlin':
-        return {
-          'settings.gradle': '''pluginManagement {
-    repositories { google(); mavenCentral(); gradlePluginPortal() }
-}
-dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
-rootProject.name = '${repoName.replaceAll("'", "")}'
-include ':app'
-''',
-          'build.gradle': '''plugins {
-    id 'com.android.application' version '8.5.2' apply false
-    id 'org.jetbrains.kotlin.android' version '1.9.24' apply false
-}
-''',
-          'app/build.gradle': '''plugins {
-    id 'com.android.application'
-    id 'org.jetbrains.kotlin.android'
-}
-
-android {
-    namespace 'com.example.app'
-    compileSdk 35
-
-    defaultConfig {
-        applicationId 'com.example.app'
-        minSdk 23
-        targetSdk 35
-        versionCode 1
-        versionName '1.0'
-    }
-}
-''',
-          'app/src/main/AndroidManifest.xml': '''<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <application android:theme="@style/AppTheme" android:label="$repoName" android:allowBackup="true" android:supportsRtl="true">
-        <activity android:name=".MainActivity" android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
-    </application>
-</manifest>
-''',
-          'app/src/main/res/values/styles.xml': '''<resources>
-    <style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar" />
-</resources>
-''',
-          'app/src/main/java/com/example/app/MainActivity.kt': '''package com.example.app
-
-import android.app.Activity
-import android.os.Bundle
-import android.widget.TextView
-
-class MainActivity : Activity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        val text = TextView(this)
-        text.text = "Hello, $repoName!"
-        text.textSize = 22f
-        text.gravity = android.view.Gravity.CENTER
-        setContentView(text)
-    }
-}
-''',
-          'README.md': '# $repoName\n\nAn Android Kotlin application.\n',
-        };
-      case 'android_java':
-        return {
-          'settings.gradle': '''pluginManagement {
-    repositories { google(); mavenCentral(); gradlePluginPortal() }
-}
-dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
-rootProject.name = '${repoName.replaceAll("'", "")}'
-include ':app'
-''',
-          'build.gradle': '''plugins {
-    id 'com.android.application' version '8.5.2' apply false
-}
-''',
-          'app/build.gradle': '''plugins {
-    id 'com.android.application'
-}
-
-android {
-    namespace 'com.example.app'
-    compileSdk 35
-
-    defaultConfig {
-        applicationId 'com.example.app'
-        minSdk 23
-        targetSdk 35
-        versionCode 1
-        versionName '1.0'
-    }
-}
-''',
-          'app/src/main/AndroidManifest.xml': '''<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <application android:theme="@style/AppTheme" android:label="$repoName" android:allowBackup="true" android:supportsRtl="true">
-        <activity android:name=".MainActivity" android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
-    </application>
-</manifest>
-''',
-          'app/src/main/res/values/styles.xml': '''<resources>
-    <style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar" />
-</resources>
-''',
-          'app/src/main/java/com/example/app/MainActivity.java': '''package com.example.app;
-
-import android.app.Activity;
-import android.os.Bundle;
-import android.widget.TextView;
-
-public class MainActivity extends Activity {
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        TextView text = new TextView(this);
-        text.setText("Hello, $repoName!");
-        text.setTextSize(22f);
-        text.setGravity(android.view.Gravity.CENTER);
-        setContentView(text);
-    }
-}
-''',
-          'README.md': '# $repoName\n\nAn Android Java application.\n',
-        };
-      case 'cpp_native':
-        return {
-          'main.cpp': '''#include <iostream>
-
-int main() {
-    std::cout << "Hello, $repoName!" << std::endl;
-    return 0;
-}
-''',
-          'CMakeLists.txt': '''cmake_minimum_required(VERSION 3.10)
-project($repoName)
-set(CMAKE_CXX_STANDARD 17)
-add_executable(\${PROJECT_NAME} main.cpp)
-''',
-          'README.md': '# $repoName\n\nA C++ native application.\n',
-        };
-      default:
-        return {};
-    }
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    final owner = widget.state.selectedOwner;
-    final repo = widget.state.selectedRepo;
-    final key = owner != null && repo != null ? '$owner/$repo' : null;
-    if (key != null && key == _cachedRepoKey && _cachedTree.containsKey('')) {
-      _roots = _cachedTree['']!;
-      _loadedRepoKey = key;
-      _selectedPath = _selectedPathByRepo[key];
-    }
-    _fetchRepos();
-  }
-
-  @override
-  void dispose() {
-    _nameCtrl.dispose();
-    _descCtrl.dispose();
-    _renameCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _safePopOverlay() async {
-    if (!mounted) return;
-    final nav = Navigator.of(context);
-    if (nav.canPop()) {
-      await nav.maybePop();
-    }
-  }
-
   Future<void> _fetchRepos({bool force = false}) async {
     if (widget.state.github == null) return;
     if (!force && _repos.isNotEmpty) return;
@@ -626,7 +238,7 @@ add_executable(\${PROJECT_NAME} main.cpp)
       final r = await widget.state.github!.createRepository(
         name: repoName,
         private: _private,
-        autoInit: _autoInit || _selectedTemplate != 'none',
+        autoInit: _autoInit,
         description: _descCtrl.text.trim(),
       );
       final owner = r['owner']['login'] as String;
@@ -635,36 +247,6 @@ add_executable(\${PROJECT_NAME} main.cpp)
       _nameCtrl.clear();
       _descCtrl.clear();
 
-      // 推送模板文件
-      if (_selectedTemplate != 'none') {
-        final files = _templateFiles(_selectedTemplate, repoName);
-        var pushed = 0;
-        for (final entry in files.entries) {
-          pushed++;
-          if (mounted) setState(() => _error = '推送模板 $pushed/${files.length}：${entry.key}');
-          try {
-            await widget.state.github!.putFile(
-              owner: owner,
-              repo: name,
-              path: entry.key,
-              message: 'Init: add ${entry.key}',
-              contentBase64: base64Encode(utf8.encode(entry.value)),
-            );
-          } catch (_) {}
-        }
-        // 推送 GitHub Actions workflow
-        if (mounted) setState(() => _error = '推送 CI/CD 工作流…');
-        try {
-          final wf = _workflowForTemplate(_selectedTemplate, name);
-          await widget.state.github!.putFile(
-            owner: owner,
-            repo: name,
-            path: _workflowPathForTemplate(_selectedTemplate),
-            message: 'Init: add GitHub Actions workflow',
-            contentBase64: base64Encode(utf8.encode(wf)),
-          );
-        } catch (_) {}
-      }
 
       await _fetchRepos(force: true);
       await _fetchTree('', force: true);
@@ -844,7 +426,6 @@ add_executable(\${PROJECT_NAME} main.cpp)
   void _showCreateSheet() {
     _nameCtrl.clear();
     _descCtrl.clear();
-    _selectedTemplate = 'none';
     _showSheet(title: '新建仓库', children: [
       MxTextField(controller: _nameCtrl, hint: '仓库名称', prefix: const Icon(Icons.folder_rounded, size: 17)),
       const SizedBox(height: 8),
@@ -855,43 +436,6 @@ add_executable(\${PROJECT_NAME} main.cpp)
         children: [
           _SwitchRow(label: '私有仓库', value: _private, onChanged: (v) => setSt(() => _private = v)),
           const SizedBox(height: 10),
-          // 模板选择
-          Text('项目模板', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.6))),
-          const SizedBox(height: 6),
-          ..._templates.entries.map((e) {
-            final selected = _selectedTemplate == e.key;
-            final scheme = Theme.of(ctx).colorScheme;
-            final isDark = Theme.of(ctx).brightness == Brightness.dark;
-            return GestureDetector(
-              onTap: () => setSt(() => _selectedTemplate = e.key),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 150),
-                margin: const EdgeInsets.only(bottom: 6),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                decoration: BoxDecoration(
-                  color: selected
-                      ? scheme.primary.withOpacity(0.12)
-                      : (isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.03)),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: selected ? scheme.primary.withOpacity(0.5) : scheme.onSurface.withOpacity(0.10),
-                    width: selected ? 1.5 : 1,
-                  ),
-                ),
-                child: Row(children: [
-                  Icon(e.value['icon'] as IconData, size: 16,
-                      color: selected ? scheme.primary : scheme.onSurface.withOpacity(0.5)),
-                  const SizedBox(width: 10),
-                  Expanded(child: Text(e.value['label'] as String,
-                      style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
-                          color: selected ? scheme.primary : scheme.onSurface.withOpacity(0.8)))),
-                  if (selected) Icon(Icons.check_circle_rounded, size: 16, color: scheme.primary),
-                ]),
-              ),
-            );
-          }),
         ],
       )),
       const SizedBox(height: 12),
@@ -959,19 +503,6 @@ add_executable(\${PROJECT_NAME} main.cpp)
           onUpload: _upload,
           onManage: _showManageSheet,
           canManage: selected != null && selected.isNotEmpty,
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(10, 8, 10, 2),
-          child: MxCard(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ProjectIdentityScreen())),
-            child: Row(children: [
-              Icon(Icons.tune_rounded, size: 16, color: scheme.primary),
-              const SizedBox(width: 8),
-              const Expanded(child: Text('项目配置', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800))),
-              Icon(Icons.chevron_right_rounded, size: 16, color: scheme.onSurface.withOpacity(0.35)),
-            ]),
-          ),
         ),
         if (_error != null)
           Padding(
@@ -1177,6 +708,41 @@ class _TreeTile extends StatefulWidget {
   State<_TreeTile> createState() => _TreeTileState();
 }
 
+class _FileGlyph extends StatelessWidget {
+  const _FileGlyph({required this.icon, required this.color, this.badge});
+
+  final IconData icon;
+  final Color color;
+  final String? badge;
+
+  @override
+  Widget build(BuildContext context) {
+    if (badge == null) return Icon(icon, size: 15, color: color);
+    return Container(
+      width: 20,
+      height: 16,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: color.withOpacity(0.62), width: 0.8),
+      ),
+      child: Text(
+        badge!,
+        maxLines: 1,
+        overflow: TextOverflow.clip,
+        style: TextStyle(
+          color: color,
+          fontSize: badge!.length > 3 ? 6.2 : 7.4,
+          height: 1,
+          fontWeight: FontWeight.w900,
+          letterSpacing: -0.35,
+        ),
+      ),
+    );
+  }
+}
+
 class _TreeTileState extends State<_TreeTile> {
   IconData _icon() {
     final node = widget.node;
@@ -1270,6 +836,47 @@ class _TreeTileState extends State<_TreeTile> {
       case 'gradle': return Icons.precision_manufacturing_rounded;
       case 'cmake': return Icons.architecture_rounded;
       default: return Icons.insert_drive_file_rounded;
+    }
+  }
+
+  String? _languageBadge() {
+    if (widget.node.isDir) return null;
+    final lower = widget.node.name.toLowerCase();
+    final ext = lower.contains('.') ? lower.split('.').last : '';
+    switch (ext) {
+      case 'dart': return 'D';
+      case 'js': case 'mjs': case 'cjs': return 'JS';
+      case 'ts': return 'TS';
+      case 'jsx': return 'JSX';
+      case 'tsx': return 'TSX';
+      case 'py': case 'pyw': case 'pyi': return 'PY';
+      case 'java': return 'JV';
+      case 'kt': case 'kts': return 'KT';
+      case 'c': return 'C';
+      case 'h': return 'H';
+      case 'cpp': case 'cc': case 'cxx': return 'C++';
+      case 'hpp': case 'hxx': return 'H++';
+      case 'cs': return 'C#';
+      case 'rs': return 'RS';
+      case 'go': return 'GO';
+      case 'swift': return 'SW';
+      case 'rb': return 'RB';
+      case 'php': return 'PHP';
+      case 'lua': return 'LUA';
+      case 'r': return 'R';
+      case 'scala': return 'SC';
+      case 'sql': return 'SQL';
+      case 'sh': case 'bash': case 'zsh': case 'fish': return 'SH';
+      case 'ps1': case 'psm1': return 'PS';
+      case 'bat': case 'cmd': return 'BAT';
+      case 'html': case 'htm': return 'HTML';
+      case 'css': return 'CSS';
+      case 'scss': return 'SCSS';
+      case 'sass': return 'SASS';
+      case 'less': return 'LESS';
+      case 'vue': return 'VUE';
+      case 'svelte': return 'SV';
+      default: return null;
     }
   }
 
@@ -1399,7 +1006,7 @@ class _TreeTileState extends State<_TreeTile> {
                     )
                   : null),
               const SizedBox(width: 2),
-              Icon(_icon(), size: 15, color: _iconColor()),
+              _FileGlyph(icon: _icon(), color: _iconColor(), badge: _languageBadge()),
               const SizedBox(width: 6),
               Expanded(child: Text(node.name, maxLines: 1, overflow: TextOverflow.ellipsis,
                   style: TextStyle(fontSize: 13,
