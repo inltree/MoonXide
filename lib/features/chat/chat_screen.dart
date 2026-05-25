@@ -25,6 +25,7 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   final _inputCtrl = TextEditingController();
+  final _inputFocus = FocusNode();
   final _scrollCtrl = ScrollController();
   final List<AiToolCall> _toolCalls = [];
   bool _autoApproveTools = false;
@@ -32,6 +33,7 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void dispose() {
     _inputCtrl.dispose();
+    _inputFocus.dispose();
     _scrollCtrl.dispose();
     super.dispose();
   }
@@ -181,10 +183,24 @@ class _ChatScreenState extends State<ChatScreen> {
         result: result,
         error: failed ? result : null,
       ));
-      await chat.addToolResult('工具：${call.name}\n参数：${jsonEncode(call.args)}\n结果：\n$result');
+      final changeSummary = call.name == 'write_file'
+          ? '\n\n${_formatFileChange(call, result)}'
+          : '';
+      await chat.addToolResult('工具：${call.name}\n参数：${jsonEncode(call.args)}\n结果：\n$result$changeSummary');
       _scrollToBottom();
     }
     return summary.toString();
+  }
+
+  String _formatFileChange(AiToolCall call, String result) {
+    final path = call.args['path'] as String? ?? 'unknown';
+    final name = path.split('/').last;
+    final content = call.args['content'] as String? ?? '';
+    final newLines = content.isEmpty ? 0 : content.split('\n').length;
+    final m = RegExp(r'变更统计：\+(\d+)\s+-(\d+)').firstMatch(result);
+    final removed = m?.group(2) ?? '?';
+    final status = result.startsWith('已写入') ? '代码变更' : '变更失败';
+    return '```diff\n$status  $name\n+ $newLines\n- $removed\n```';
   }
 
   Future<bool> _confirmTool(AiToolCall call) {
@@ -389,15 +405,111 @@ class _ChatScreenState extends State<ChatScreen> {
                 const SizedBox(height: 6),
               ],
               Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                Expanded(child: MxTextField(controller: _inputCtrl, hint: '输入开发任务，AI 可规划并调用工具…', minLines: 1, maxLines: 5, keyboardType: TextInputType.multiline)),
-                const SizedBox(width: 7),
-                MxIconBtn(icon: chat.busy ? Icons.hourglass_top_rounded : Icons.send_rounded, onPressed: chat.busy ? null : () => _send(chat, aiConfig, workflow), active: true, size: 42),
+                Expanded(
+                  child: _InlineChatInput(
+                    controller: _inputCtrl,
+                    focusNode: _inputFocus,
+                    busy: chat.busy,
+                    onSend: () => _send(chat, aiConfig, workflow),
+                  ),
+                ),
               ]),
             ],
           ),
         ),
       ),
     ]);
+  }
+}
+
+class _InlineChatInput extends StatefulWidget {
+  const _InlineChatInput({required this.controller, required this.focusNode, required this.busy, required this.onSend});
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final bool busy;
+  final VoidCallback onSend;
+
+  @override
+  State<_InlineChatInput> createState() => _InlineChatInputState();
+}
+
+class _InlineChatInputState extends State<_InlineChatInput> {
+  @override
+  void initState() {
+    super.initState();
+    widget.focusNode.addListener(_refresh);
+    widget.controller.addListener(_refresh);
+  }
+
+  void _refresh() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    widget.focusNode.removeListener(_refresh);
+    widget.controller.removeListener(_refresh);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final showSend = widget.focusNode.hasFocus || widget.controller.text.trim().isNotEmpty || widget.busy;
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 160),
+      curve: Curves.easeOutCubic,
+      padding: const EdgeInsets.fromLTRB(13, 5, 5, 5),
+      decoration: BoxDecoration(
+        color: (isDark ? const Color(0xFF0F2230) : Colors.white).withOpacity(isDark ? 0.78 : 0.92),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: widget.focusNode.hasFocus ? scheme.primary.withOpacity(0.42) : scheme.outlineVariant.withOpacity(0.38)),
+      ),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+        Expanded(
+          child: TextField(
+            controller: widget.controller,
+            focusNode: widget.focusNode,
+            minLines: 1,
+            maxLines: 5,
+            keyboardType: TextInputType.multiline,
+            style: TextStyle(fontSize: 14, color: scheme.onSurface),
+            decoration: InputDecoration(
+              hintText: '输入开发任务，AI 可规划并调用工具…',
+              hintStyle: TextStyle(fontSize: 14, color: scheme.onSurface.withOpacity(0.34)),
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(vertical: 10),
+            ),
+          ),
+        ),
+        AnimatedScale(
+          scale: showSend ? 1 : 0,
+          duration: const Duration(milliseconds: 150),
+          curve: Curves.easeOutBack,
+          child: AnimatedOpacity(
+            opacity: showSend ? 1 : 0,
+            duration: const Duration(milliseconds: 120),
+            child: SizedBox(
+              width: showSend ? 38 : 0,
+              height: 38,
+              child: Material(
+                color: widget.busy ? scheme.onSurface.withOpacity(0.10) : scheme.primary,
+                borderRadius: BorderRadius.circular(19),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(19),
+                  onTap: widget.busy ? null : widget.onSend,
+                  child: Icon(widget.busy ? Icons.hourglass_top_rounded : Icons.arrow_upward_rounded, size: 18, color: widget.busy ? scheme.onSurface.withOpacity(0.42) : Colors.white),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ]),
+    );
   }
 }
 
@@ -556,6 +668,89 @@ class _PlanCard extends StatelessWidget {
   }
 }
 
+class _AssistantMessage extends StatelessWidget {
+  const _AssistantMessage({required this.content});
+  final String content;
+
+  @override
+  Widget build(BuildContext context) {
+    final parts = content.split('[工具返回]');
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      MarkdownBody(data: parts.first.trim().isEmpty ? '…' : parts.first.trim(), selectable: true, softLineBreak: true),
+      for (final raw in parts.skip(1)) ...[
+        const SizedBox(height: 8),
+        _ToolResultView(raw: raw.trim()),
+      ],
+    ]);
+  }
+}
+
+class _ToolResultView extends StatelessWidget {
+  const _ToolResultView({required this.raw});
+  final String raw;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final diff = RegExp(r'```diff\n([\s\S]*?)```').firstMatch(raw)?.group(1)?.trim();
+    final title = RegExp(r'工具：([^\n]+)').firstMatch(raw)?.group(1)?.trim() ?? '工具执行';
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: scheme.primary.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: scheme.primary.withOpacity(0.16)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(Icons.terminal_rounded, size: 14, color: scheme.primary),
+          const SizedBox(width: 6),
+          Expanded(child: Text(title, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: scheme.primary))),
+        ]),
+        if (diff != null) ...[
+          const SizedBox(height: 8),
+          _DiffBadge(diff: diff),
+        ] else ...[
+          const SizedBox(height: 6),
+          Text(raw, maxLines: 4, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, height: 1.35, color: scheme.onSurface.withOpacity(0.60))),
+        ],
+      ]),
+    );
+  }
+}
+
+class _DiffBadge extends StatelessWidget {
+  const _DiffBadge({required this.diff});
+  final String diff;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final lines = diff.split('\n');
+    final header = lines.isNotEmpty ? lines.first : '代码变更 unknown';
+    final plus = lines.firstWhere((e) => e.trim().startsWith('+'), orElse: () => '+ ?').replaceFirst('+', '').trim();
+    final minus = lines.firstWhere((e) => e.trim().startsWith('-'), orElse: () => '- ?').replaceFirst('-', '').trim();
+    final file = header.split(RegExp(r'\s+')).last;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: scheme.surface.withOpacity(0.74),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: scheme.outlineVariant.withOpacity(0.35)),
+      ),
+      child: Row(children: [
+        Icon(Icons.difference_rounded, size: 15, color: scheme.primary),
+        const SizedBox(width: 8),
+        Expanded(child: Text(file, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900))),
+        Text('+$plus', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Colors.green)),
+        const SizedBox(width: 8),
+        Text('-$minus', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: scheme.error)),
+      ]),
+    );
+  }
+}
+
 class _Bubble extends StatefulWidget {
   const _Bubble({required this.message, required this.isUser, required this.isDark, required this.scheme});
   final ChatMessageRecord message;
@@ -599,7 +794,7 @@ class _BubbleState extends State<_Bubble> with SingleTickerProviderStateMixin {
               ),
               child: widget.isUser
                   ? SelectableText(widget.message.content.isEmpty ? '…' : widget.message.content, style: const TextStyle(color: Colors.white, fontSize: 14))
-                  : MarkdownBody(data: widget.message.content.isEmpty ? '…' : widget.message.content, selectable: true, softLineBreak: true),
+                  : _AssistantMessage(content: widget.message.content.isEmpty ? '…' : widget.message.content),
             ),
           ),
         ),

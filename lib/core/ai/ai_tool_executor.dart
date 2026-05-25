@@ -77,7 +77,14 @@ class AiToolExecutor {
         final message = call.args['message'] as String? ?? 'Update $path by MoonXide AI';
         try {
           String? sha;
-          try { final f = await gh.getFile(owner, repo, path); sha = f['sha'] as String?; } catch (_) {}
+          var oldLines = 0;
+          try {
+            final f = await gh.getFile(owner, repo, path);
+            sha = f['sha'] as String?;
+            final raw = (f['content'] as String).replaceAll('\n', '');
+            final oldContent = utf8.decode(base64Decode(raw), allowMalformed: true);
+            oldLines = oldContent.isEmpty ? 0 : oldContent.split('\n').length;
+          } catch (_) {}
           await gh.putFile(
             owner: owner, repo: repo, path: path,
             message: message,
@@ -89,7 +96,8 @@ class AiToolExecutor {
             editorState.openFile(path, content);
             editorState.markSaved();
           }
-          return '已写入并提交：$path';
+          final newLines = content.isEmpty ? 0 : content.split('\n').length;
+          return '已写入并提交：$path\n变更统计：+$newLines -$oldLines';
         } catch (e) { return '写入失败：$e'; }
 
       case 'list_files':
