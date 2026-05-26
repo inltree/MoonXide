@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../app/mx_widgets.dart';
 import '../../core/services/app_state.dart';
+import '../token_gate/token_gate_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key, required this.state});
@@ -53,156 +54,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   int get repoStars => repos.fold<int>(0, (s, r) => s + ((r['stargazers_count'] as num?)?.toInt() ?? 0));
 
-  void _showAccountSwitchSheet() {
-    final scheme = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final tokenCtrl = TextEditingController();
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return Container(
-              padding: EdgeInsets.fromLTRB(18, 16, 18, MediaQuery.of(context).viewInsets.bottom + 24),
-              decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF0F1B26) : Colors.white,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 36,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: scheme.onSurface.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    '账号管理',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
-                  ),
-                  const SizedBox(height: 14),
-                  // 多账号列表
-                  ...widget.state.accounts.map((acc) {
-                    final isCurrent = acc['login'] == widget.state.login;
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: isCurrent
-                            ? scheme.primary.withOpacity(0.08)
-                            : (isDark ? Colors.white.withOpacity(0.03) : Colors.black.withOpacity(0.02)),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: isCurrent ? scheme.primary.withOpacity(0.4) : Colors.transparent,
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          CircleAvatar(
-                            radius: 16,
-                            backgroundImage: (acc['avatarUrl'] ?? '').isNotEmpty
-                                ? NetworkImage(acc['avatarUrl']!)
-                                : null,
-                            child: (acc['avatarUrl'] ?? '').isEmpty ? const Icon(Icons.person_rounded) : null,
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              '@${acc['login']}',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: isCurrent ? FontWeight.w800 : FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                          if (isCurrent)
-                            const Icon(Icons.check_circle_rounded, size: 16, color: Colors.green)
-                          else
-                            IconButton(
-                              icon: const Icon(Icons.login_rounded, size: 16),
-                              onPressed: () async {
-                                Navigator.pop(ctx);
-                                await widget.state.switchAccount(acc['login']!);
-                                _load();
-                              },
-                            ),
-                          IconButton(
-                            icon: const Icon(Icons.delete_outline_rounded, size: 16, color: Colors.redAccent),
-                            onPressed: () async {
-                              await widget.state.removeAccount(acc['login']!);
-                              setModalState(() {});
-                              if (widget.state.accounts.isEmpty) {
-                                Navigator.pop(ctx);
-                                Navigator.pop(context); // 退出主页
-                              }
-                            },
-                          ),
-                        ],
-                      ),
-                    );
-                  }).toList(),
-                  const SizedBox(height: 12),
-                  const Divider(),
-                  const SizedBox(height: 8),
-                  const Text('添加 GitHub 账号', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 8),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF162533) : const Color(0xFFF1F3F4),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: TextField(
-                      controller: tokenCtrl,
-                      obscureText: true,
-                      style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
-                      decoration: const InputDecoration(
-                        hintText: '输入 ghp_ 个人访问令牌',
-                        border: InputBorder.none,
-                        enabledBorder: InputBorder.none,
-                        focusedBorder: InputBorder.none,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  MxButton(
-                    label: '验证并添加账户',
-                    icon: Icons.add_rounded,
-                    onPressed: () async {
-                      final val = tokenCtrl.text.trim();
-                      if (val.isEmpty) return;
-                      Navigator.pop(ctx);
-                      final ok = await widget.state.acceptToken(val);
-                      if (ok) {
-                        _load();
-                      } else {
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(widget.state.error ?? '令牌验证失败')),
-                          );
-                        }
-                      }
-                    },
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -219,7 +70,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     MxIconBtn(icon: Icons.arrow_back_rounded, onPressed: () => Navigator.pop(context)),
                     const SizedBox(width: 10),
                     const Expanded(child: Text('GitHub 主页', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900))),
-                    MxIconBtn(icon: Icons.switch_account_rounded, onPressed: _showAccountSwitchSheet, tooltip: '切换账号'),
+                    MxIconBtn(
+                      icon: Icons.switch_account_rounded,
+                      tooltip: '管理多账号',
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => const TokenGateScreen()),
+                        ).then((_) => _load());
+                      },
+                    ),
                     MxIconBtn(icon: Icons.refresh_rounded, onPressed: _load),
                   ]),
                   const SizedBox(height: 14),
@@ -256,11 +115,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         children: [
                           Expanded(
                             child: MxButton(
-                              label: '切换账号 / 管理多账号',
+                              label: '切换/管理多账号',
                               icon: Icons.switch_account_rounded,
                               small: true,
                               filled: false,
-                              onPressed: _showAccountSwitchSheet,
+                              onPressed: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(builder: (_) => const TokenGateScreen()),
+                                ).then((_) => _load());
+                              },
                             ),
                           ),
                           const SizedBox(width: 8),

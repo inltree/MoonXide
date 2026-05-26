@@ -6,6 +6,7 @@ import '../../app/github_logo.dart';
 import '../../app/mx_widgets.dart';
 import '../../core/services/app_state.dart';
 import '../ai_settings/ai_settings_screen.dart';
+import '../token_gate/token_gate_screen.dart';
 import '../signing/signing_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -33,7 +34,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       children: [
         const MxSectionLabel('账号'),
         MxCard(
-          onTap: () => widget.state.logout(),
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const TokenGateScreen()),
+          ),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             child: Row(children: [
@@ -44,9 +47,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(widget.state.login == null ? 'GitHub 未登录' : '@${widget.state.login}', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14)),
                 const SizedBox(height: 2),
-                Text('点击退出登录', style: TextStyle(fontSize: 12, color: scheme.onSurface.withOpacity(0.5))),
+                Text('点击管理/切换账号', style: TextStyle(fontSize: 12, color: scheme.onSurface.withOpacity(0.5))),
               ])),
-              Icon(Icons.logout_rounded, color: scheme.error, size: 20),
+              Icon(Icons.switch_account_rounded, color: scheme.primary, size: 20),
             ]),
           ),
         ),

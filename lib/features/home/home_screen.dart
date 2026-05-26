@@ -14,6 +14,7 @@ import '../chat/chat_screen.dart';
 import '../build/build_screen.dart';
 import '../release/release_screen.dart';
 import '../settings/settings_screen.dart';
+import '../token_gate/token_gate_screen.dart';
 import '../profile/profile_screen.dart';
 
 enum _LeftPanel  { none, workspace }
@@ -637,11 +638,11 @@ class _AvatarButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Tooltip(
-      message: 'GitHub 主页',
+      message: '切换/管理账号',
       child: InkWell(
         borderRadius: BorderRadius.circular(999),
         onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => ProfileScreen(state: state)),
+          MaterialPageRoute(builder: (_) => const TokenGateScreen()),
         ),
         child: Container(
           width: 34,

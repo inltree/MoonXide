@@ -3,6 +3,12 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../app/github_logo.dart';
 import '../../core/services/app_state.dart';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../app/github_logo.dart';
+import '../../core/services/app_state.dart';
+
 class TokenGateScreen extends StatefulWidget {
   const TokenGateScreen({super.key});
 
@@ -32,6 +38,135 @@ class _TokenGateScreenState extends State<TokenGateScreen> {
     }
   }
 
+  void _showAccountManageDialog(BuildContext context, AppState state) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final addTokenCtrl = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: isDark ? const Color(0xFF0F1B26) : Colors.white,
+              title: const Text('多账号与切换', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    const Text('已保存的账号列表：', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 8),
+                    if (state.accounts.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 8),
+                        child: Text('暂无保存的其他账号', style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic)),
+                      ),
+                    ...state.accounts.map((acc) {
+                      final isCurrent = acc['login'] == state.login;
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 6),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: isCurrent
+                              ? scheme.primary.withOpacity(0.08)
+                              : (isDark ? Colors.white.withOpacity(0.03) : Colors.black.withOpacity(0.02)),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: isCurrent ? scheme.primary.withOpacity(0.4) : Colors.transparent,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 14,
+                              backgroundImage: (acc['avatarUrl'] ?? '').isNotEmpty
+                                  ? NetworkImage(acc['avatarUrl']!)
+                                  : null,
+                              child: (acc['avatarUrl'] ?? '').isEmpty ? const Icon(Icons.person_rounded, size: 14) : null,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                '@${acc['login']}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: isCurrent ? FontWeight.w800 : FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                            if (isCurrent)
+                              const Icon(Icons.check_circle_rounded, size: 15, color: Colors.green)
+                            else
+                              IconButton(
+                                icon: const Icon(Icons.login_rounded, size: 15),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                                onPressed: () async {
+                                  Navigator.pop(ctx);
+                                  await state.switchAccount(acc['login']!);
+                                },
+                              ),
+                            const SizedBox(width: 8),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline_rounded, size: 15, color: Colors.redAccent),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              onPressed: () async {
+                                await state.removeAccount(acc['login']!);
+                                setDialogState(() {});
+                              },
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                    const Divider(height: 20),
+                    const Text('添加新账号：', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 6),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF162533) : const Color(0xFFF1F3F4),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: scheme.onSurface.withOpacity(0.1)),
+                      ),
+                      child: TextField(
+                        controller: addTokenCtrl,
+                        obscureText: true,
+                        style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                        decoration: const InputDecoration(
+                          hintText: '输入新 Token (ghp_...)',
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('关闭'),
+                ),
+                TextButton(
+                  onPressed: () async {
+                    final val = addTokenCtrl.text.trim();
+                    if (val.isEmpty) return;
+                    Navigator.pop(ctx);
+                    await state.acceptToken(val);
+                  },
+                  child: const Text('验证并登录'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
@@ -41,7 +176,6 @@ class _TokenGateScreenState extends State<TokenGateScreen> {
       _ctrl.text = state.token!;
     }
 
-    // 图片中背景是纯白色（或者纯黑色，取决于深浅模式，一般以纯白为主风格，这里我们支持主题色或者极简白/极简黑）
     final bgColor = isDark ? const Color(0xFF0D0D0D) : Colors.white;
     final textColor = isDark ? Colors.white : Colors.black;
     final subtitleColor = isDark ? Colors.white.withOpacity(0.6) : const Color(0xFF5F6368);
@@ -57,7 +191,7 @@ class _TokenGateScreenState extends State<TokenGateScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const SizedBox(height: 56),
+              const SizedBox(height: 48),
 
               // ── 顶部居中的 GitHub Logo ──────────────────────────────────────────────
               Center(
@@ -78,7 +212,6 @@ class _TokenGateScreenState extends State<TokenGateScreen> {
               ),
               const SizedBox(height: 24),
 
-              // ── 使用 Token 登录 ──
               Text(
                 '使用 Token 登录',
                 textAlign: TextAlign.center,
@@ -91,9 +224,8 @@ class _TokenGateScreenState extends State<TokenGateScreen> {
               ),
               const SizedBox(height: 10),
 
-              // ── 使用 GitHub Personal Access Token 安全登录并访问您的资源 ──
               Text(
-                '使用 GitHub Personal Access Token\n安全登录并访问您的资源',
+                '使用 GitHub Personal Access Token 安全登录并访问您的资源。',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 14,
@@ -102,9 +234,22 @@ class _TokenGateScreenState extends State<TokenGateScreen> {
                   color: subtitleColor,
                 ),
               ),
-              const SizedBox(height: 48),
+              const SizedBox(height: 36),
 
-              // ── Personal Access Token 标签 ──
+              // ── 账号管理切换入口 ──
+              if (state.accounts.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 24),
+                  child: TextButton.icon(
+                    onPressed: () => _showAccountManageDialog(context, state),
+                    icon: const Icon(Icons.switch_account_rounded),
+                    label: Text(
+                      '已保存 ${state.accounts.length} 个账号，点击切换/管理',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+
               Text(
                 'Personal Access Token',
                 style: TextStyle(
@@ -115,7 +260,6 @@ class _TokenGateScreenState extends State<TokenGateScreen> {
               ),
               const SizedBox(height: 8),
 
-              // ── 输入框 ──
               Container(
                 decoration: BoxDecoration(
                   color: inputBgColor,
@@ -154,7 +298,6 @@ class _TokenGateScreenState extends State<TokenGateScreen> {
               ),
               const SizedBox(height: 8),
 
-              // ── Token 以 “ghp_”、“github_pat_” 或 “v1.” 开头 ──
               Text(
                 'Token 以 “ghp_”、“github_pat_” 或 “v1.” 开头',
                 style: TextStyle(
@@ -164,46 +307,83 @@ class _TokenGateScreenState extends State<TokenGateScreen> {
               ),
               const SizedBox(height: 48),
 
-              // ── 登录按钮 ──
-              SizedBox(
-                height: 52,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: isDark ? Colors.white : Colors.black,
-                    foregroundColor: isDark ? Colors.black : Colors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  onPressed: state.loading
-                      ? null
-                      : () {
-                          context.read<AppState>().acceptToken(_ctrl.text.trim());
-                        },
-                  child: state.loading
-                      ? SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              isDark ? Colors.black : Colors.white,
-                            ),
-                          ),
-                        )
-                      : const Text(
-                          '登录',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
+              Row(
+                children: [
+                  Expanded(
+                    child: SizedBox(
+                      height: 52,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: isDark ? Colors.white : Colors.black,
+                          foregroundColor: isDark ? Colors.black : Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                ),
+                        onPressed: state.loading
+                            ? null
+                            : () async {
+                                final ok = await context.read<AppState>().acceptToken(_ctrl.text.trim());
+                                if (ok && mounted) {
+                                  _ctrl.text = state.token ?? '';
+                                }
+                              },
+                        child: state.loading
+                            ? SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    isDark ? Colors.black : Colors.white,
+                                  ),
+                                ),
+                              )
+                            : const Text(
+                                '登录',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                      ),
+                    ),
+                  ),
+                  if (state.token != null && state.token!.isNotEmpty) ...[
+                    const SizedBox(width: 12),
+                    SizedBox(
+                      height: 52,
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.redAccent,
+                          side: const BorderSide(color: Colors.redAccent, width: 1.2),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        onPressed: () async {
+                          final ok = await MxDialog.show(
+                            context,
+                            title: '退出登录',
+                            content: '确认退出当前账号 @${state.login} 吗？',
+                            confirmLabel: '退出',
+                            cancelLabel: '取消',
+                            confirmColor: Colors.redAccent,
+                          );
+                          if (ok) {
+                            await state.logout();
+                            _ctrl.clear();
+                          }
+                        },
+                        child: const Text('退出登录', style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ],
+                ],
               ),
               const SizedBox(height: 24),
 
-              // ── 您的 Token 将安全存储，仅用于 API 访问 ──
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -224,7 +404,6 @@ class _TokenGateScreenState extends State<TokenGateScreen> {
               ),
               const SizedBox(height: 16),
 
-              // 错误或者状态反馈，优雅提示出来而不在布局里占大卡片
               if (state.error != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
@@ -254,7 +433,6 @@ class _TokenGateScreenState extends State<TokenGateScreen> {
 
               const SizedBox(height: 48),
 
-              // ── 如何创建 Token? ──────────────────────────────────────────────
               Center(
                 child: TextButton(
                   onPressed: _openTokenPage,
@@ -289,4 +467,5 @@ class _TokenGateScreenState extends State<TokenGateScreen> {
       ),
     );
   }
+}
 }

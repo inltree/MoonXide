@@ -154,6 +154,9 @@ class EditorScreenState extends State<EditorScreen> {
   bool showFind = false;
   double _editorFontSize = 13.0; // 支持手势缩放
 
+  // 用于实现高级多指捏合放大、缩小、以及放大后随意双轴拖拽浏览的矩阵控制器
+  final TransformationController _transformationController = TransformationController();
+
   @override
   void initState() {
     super.initState();
@@ -172,6 +175,7 @@ class EditorScreenState extends State<EditorScreen> {
     replaceController.dispose();
     lineJumpController.dispose();
     _editorScroll.dispose();
+    _transformationController.dispose();
     super.dispose();
   }
 
@@ -542,24 +546,23 @@ $fileContent
 
               // 代码区（横向可滚动 + 错误波浪线 overlay + 错误点击区域）
               Expanded(
-                child: Stack(
-                  children: [
-                    RawScrollbar(
-                      controller: _editorScroll,
-                      thumbVisibility: true,
-                      interactive: true,
-                      thickness: 6,
-                      radius: const Radius.circular(999),
-                      thumbColor: scheme.primary.withOpacity(0.58),
-                      minOverscrollLength: 20,
-                      child: GestureDetector(
-                        onScaleUpdate: (ScaleUpdateDetails details) {
-                          if (details.scale != 1.0) {
-                            setState(() {
-                              _editorFontSize = (_editorFontSize * details.scale).clamp(8.0, 36.0);
-                            });
-                          }
-                        },
+                child: InteractiveViewer(
+                  transformationController: _transformationController,
+                  panEnabled: true,      // 放大后允许自由双轴拖拽浏览
+                  scaleEnabled: true,    // 允许双指捏合随意手势缩放
+                  minScale: 0.5,
+                  maxScale: 4.0,
+                  boundaryMargin: const EdgeInsets.all(80.0), // 留出边缘空间防止生硬回弹
+                  child: Stack(
+                    children: [
+                      RawScrollbar(
+                        controller: _editorScroll,
+                        thumbVisibility: true,
+                        interactive: true,
+                        thickness: 6,
+                        radius: const Radius.circular(999),
+                        thumbColor: scheme.primary.withOpacity(0.58),
+                        minOverscrollLength: 20,
                         child: SingleChildScrollView(
                           scrollDirection: Axis.horizontal,
                           child: SizedBox(
@@ -594,34 +597,34 @@ $fileContent
                           ),
                         ),
                       ),
-                    ),
-                    // 错误波浪线 overlay
-                    if (diagnostics.isNotEmpty)
-                      Positioned.fill(
-                        child: IgnorePointer(
-                          child: CustomPaint(
-                            painter: _WavePainter(
-                              text: contentController.text,
-                              diagnostics: diagnostics,
-                              baseStyle: contentController.baseStyle,
-                              scrollOffset: _editorScroll.hasClients ? _editorScroll.offset : 0,
-                              fontSize: _editorFontSize,
+                      // 错误波浪线 overlay
+                      if (diagnostics.isNotEmpty)
+                        Positioned.fill(
+                          child: IgnorePointer(
+                            child: CustomPaint(
+                              painter: _WavePainter(
+                                text: contentController.text,
+                                diagnostics: diagnostics,
+                                baseStyle: contentController.baseStyle,
+                                scrollOffset: _editorScroll.hasClients ? _editorScroll.offset : 0,
+                                fontSize: _editorFontSize,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    // 错误点击热区
-                    if (diagnostics.isNotEmpty)
-                      Positioned.fill(
-                        child: _ErrorTapLayer(
-                          text: contentController.text,
-                          diagnostics: diagnostics,
-                          scrollOffset: _editorScroll.hasClients ? _editorScroll.offset : 0,
-                          baseStyle: contentController.baseStyle,
-                          onTapError: (diag) => _handleErrorTap(context, diag, editor),
+                      // 错误点击热区
+                      if (diagnostics.isNotEmpty)
+                        Positioned.fill(
+                          child: _ErrorTapLayer(
+                            text: contentController.text,
+                            diagnostics: diagnostics,
+                            scrollOffset: _editorScroll.hasClients ? _editorScroll.offset : 0,
+                            baseStyle: contentController.baseStyle,
+                            onTapError: (diag) => _handleErrorTap(context, diag, editor),
+                          ),
                         ),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ],
