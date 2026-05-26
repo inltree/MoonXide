@@ -764,7 +764,7 @@ class _BuildToastState extends State<_BuildToast> {
   late Timer _tipTimer;
   int _tipIdx = 0;
 
-  const _tips = [
+  static const _tips = [
     '☕ 代码正在变成二进制，顺便喝杯咖啡吧。',
     '✨ 正在给你的 APK 注入魔法，请稍候。',
     '🌌 物理规律表明，代码越好，编译速度越快…',
