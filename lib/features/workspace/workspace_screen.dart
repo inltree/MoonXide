@@ -68,13 +68,100 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
   bool _private = true;
   bool _autoInit = true;
 
+  // 高级搜索状态与被过滤出来的扁平节点列表
+  bool _isAdvancedSearching = false;
+  List<_TreeNode> _advancedFilteredRoots = [];
+
   @override
   void initState() {
     super.initState();
     _searchFilterCtrl.addListener(() {
-      setState(() {});
+      final text = _searchFilterCtrl.text.trim();
+      if (text.toLowerCase().startsWith('content:')) {
+        final query = text.substring(8).trim().toLowerCase();
+        if (query.isNotEmpty) {
+          _triggerAdvancedSearch(query);
+        } else {
+          setState(() {
+            _isAdvancedSearching = false;
+            _advancedFilteredRoots = [];
+          });
+        }
+      } else {
+        setState(() {
+          _isAdvancedSearching = false;
+          _advancedFilteredRoots = [];
+        });
+      }
     });
     WidgetsBinding.instance.addPostFrameCallback((_) => _bootstrapWorkspace());
+  }
+
+  // 高级搜索实现：静默、隐藏性递归加载全部叶子文件内容并进行文本包含匹配
+  Future<void> _triggerAdvancedSearch(String query) async {
+    final owner = widget.state.selectedOwner;
+    final repo = widget.state.selectedRepo;
+    if (owner == null || repo == null || widget.state.github == null) return;
+    
+    setState(() {
+      _isAdvancedSearching = true;
+      _loadingTree = true;
+    });
+
+    try {
+      final List<_TreeNode> matches = [];
+      // 深度优先递归遍历整棵树
+      await _searchInDirectoryRecursive(owner, repo, '', query, matches);
+      
+      if (mounted) {
+        setState(() {
+          _advancedFilteredRoots = matches;
+          _loadingTree = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = '高级搜索失败：$e';
+          _loadingTree = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _searchInDirectoryRecursive(String owner, String repo, String path, String query, List<_TreeNode> matches) async {
+    final contents = await widget.state.github!.getContents(owner, repo, path: path);
+    for (final item in contents) {
+      final itemPath = item['path'] as String;
+      final isDir = item['type'] == 'dir';
+      if (isDir) {
+        // 静默深层递归加载子目录
+        await _searchInDirectoryRecursive(owner, repo, itemPath, query, matches);
+      } else {
+        final name = item['name'] as String;
+        final lower = name.toLowerCase();
+        final ext = lower.contains('.') ? lower.split('.').last : '';
+        final binaryExt = ['png','jpg','jpeg','webp','gif','pdf','zip','apk','jar','so','a','dex','exe','bin','keystore','jks','exe','dll','sys','obj','lib','o','out','app','dmg','iso','tar','gz','bz2','7z','rar','tgz'];
+        if (binaryExt.contains(ext)) continue; // 跳过二进制文件
+
+        try {
+          final fileData = await widget.state.github!.getFile(owner, repo, itemPath);
+          final raw = (fileData['content'] as String).replaceAll('\n', '');
+          final textContent = utf8.decode(base64Decode(raw), allowMalformed: true);
+          if (textContent.toLowerCase().contains(query)) {
+            matches.add(_TreeNode(
+              name: name,
+              path: itemPath,
+              isDir: false,
+              sha: item['sha'] as String?,
+              downloadUrl: item['download_url'] as String?,
+            ));
+          }
+        } catch (_) {
+          // 静默忽略单个文件的获取失败
+        }
+      }
+    }
   }
 
   @override
@@ -103,6 +190,14 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
   // 递归过滤节点，若节点包含关键字、或其任意子孙节点包含关键字，则保留
   List<_TreeNode> _filterTree(List<_TreeNode> originalList, String keyword) {
     if (keyword.isEmpty) return originalList;
+    
+    // 如果是高级搜索 (以 "content:" 开头)
+    if (keyword.toLowerCase().startsWith('content:')) {
+      final query = keyword.substring(8).trim().toLowerCase();
+      if (query.isEmpty) return originalList;
+      return _advancedFilteredRoots;
+    }
+
     final term = keyword.toLowerCase();
     final List<_TreeNode> result = [];
     for (final node in originalList) {
@@ -667,32 +762,54 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
         if (selected != null && selected.isNotEmpty)
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-            child: Container(
-              height: 36,
-              decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF161616) : const Color(0xFFF1F3F4),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: TextField(
-                controller: _searchFilterCtrl,
-                style: const TextStyle(fontSize: 13),
-                decoration: InputDecoration(
-                  isDense: true,
-                  hintText: '搜索文件或文件夹...',
-                  hintStyle: TextStyle(color: scheme.onSurface.withOpacity(0.4), fontSize: 13),
-                  prefixIcon: Icon(Icons.search_rounded, size: 16, color: scheme.onSurface.withOpacity(0.5)),
-                  suffixIcon: _searchFilterCtrl.text.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(Icons.clear_rounded, size: 16),
-                          onPressed: () => _searchFilterCtrl.clear(),
-                        )
-                      : null,
-                  border: InputBorder.none,
-                  enabledBorder: InputBorder.none,
-                  focusedBorder: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 10),
+            child: Row(
+              children: [
+                if (_isAdvancedSearching)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: TextButton.icon(
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        backgroundColor: scheme.primary.withOpacity(0.12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      icon: const Icon(Icons.arrow_back_rounded, size: 14),
+                      label: const Text('退出', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      onPressed: () {
+                        _searchFilterCtrl.clear();
+                      },
+                    ),
+                  ),
+                Expanded(
+                  child: Container(
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF161616) : const Color(0xFFF1F3F4),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: TextField(
+                      controller: _searchFilterCtrl,
+                      style: const TextStyle(fontSize: 13),
+                      decoration: InputDecoration(
+                        isDense: true,
+                        hintText: '搜索文件，或 content:内容 搜索内容',
+                        hintStyle: TextStyle(color: scheme.onSurface.withOpacity(0.4), fontSize: 11),
+                        prefixIcon: Icon(Icons.search_rounded, size: 16, color: scheme.onSurface.withOpacity(0.5)),
+                        suffixIcon: _searchFilterCtrl.text.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear_rounded, size: 16),
+                                onPressed: () => _searchFilterCtrl.clear(),
+                              )
+                            : null,
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                      ),
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ),
           ),
         if (_error != null)

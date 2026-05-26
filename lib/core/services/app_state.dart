@@ -25,6 +25,9 @@ class AppState extends ChangeNotifier {
   String? error;
   BuildProfile buildProfile = BuildProfile.debug;
 
+  // 支持切换账号与管理多账号
+  List<Map<String, String>> accounts = []; // [{"login": "...", "token": "...", "avatarUrl": "..."}]
+
   AppState({required this.tokenStore});
 
   Future<void> restore() async {
@@ -38,6 +41,18 @@ class AppState extends ChangeNotifier {
       selectedRepo = parts.sublist(1).join('/');
       selectedRepoFullName = lastFullName;
     }
+    
+    // 加载多账号
+    final savedAccounts = prefs.getStringList('github_accounts') ?? [];
+    accounts = savedAccounts.map((item) {
+      final parts = item.split('|');
+      return {
+        'login': parts[0],
+        'token': parts[1],
+        'avatarUrl': parts.length > 2 ? parts[2] : '',
+      };
+    }).toList();
+
     token = await tokenStore.readToken();
     if (token == null || token!.isEmpty) return;
     github = GithubService(token: token!);
@@ -45,6 +60,65 @@ class AppState extends ChangeNotifier {
     tokenStatus = '已加载本地 Token，正在后台验证 GitHub 连接...';
     notifyListeners();
     unawaited(refreshTokenValidation());
+  }
+
+  Future<void> switchAccount(String loginName) async {
+    final acc = accounts.firstWhere((element) => element['login'] == loginName, orElse: () => {});
+    if (acc.isEmpty) return;
+    final nextToken = acc['token']!;
+    
+    loading = true;
+    error = null;
+    tokenStatus = '正在切换并验证 Token...';
+    notifyListeners();
+
+    final service = GithubService(token: nextToken);
+    token = nextToken;
+    github = service;
+    await tokenStore.saveToken(nextToken);
+
+    try {
+      final user = await service.getCurrentUser();
+      login = user['login'] as String?;
+      avatarUrl = user['avatar_url'] as String?;
+      currentUser = Map<String, dynamic>.from(user);
+      selectedOwner = login;
+      tokenValidated = true;
+      tokenStatus = login == null ? 'Token 验证成功' : 'Token 验证成功：$login';
+      loading = false;
+      
+      // 更新该账号最新头像
+      acc['avatarUrl'] = avatarUrl ?? '';
+      await _saveAccountsToPrefs();
+      
+      notifyListeners();
+    } catch (e) {
+      tokenValidated = false;
+      tokenStatus = null;
+      error = _formatTokenError(e);
+      loading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> removeAccount(String loginName) async {
+    accounts.removeWhere((element) => element['login'] == loginName);
+    await _saveAccountsToPrefs();
+    if (login == loginName) {
+      if (accounts.isNotEmpty) {
+        await switchAccount(accounts.first['login']!);
+      } else {
+        await logout();
+      }
+    } else {
+      notifyListeners();
+    }
+  }
+
+  Future<void> _saveAccountsToPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    final list = accounts.map((e) => '${e['login']}|${e['token']}|${e['avatarUrl']}').toList();
+    await prefs.setStringList('github_accounts', list);
   }
 
   Future<bool> refreshTokenValidation() async {
@@ -58,6 +132,10 @@ class AppState extends ChangeNotifier {
       tokenValidated = true;
       tokenStatus = login == null ? 'Token 验证成功' : 'Token 验证成功：$login';
       error = null;
+      
+      // 自动保存/更新当前账号到列表
+      _addOrUpdateAccount(login!, token!, avatarUrl!);
+      
       notifyListeners();
       return true;
     } on SocketException catch (e) {
@@ -72,6 +150,16 @@ class AppState extends ChangeNotifier {
       notifyListeners();
       return false;
     }
+  }
+
+  void _addOrUpdateAccount(String loginName, String tokenVal, String avatar) {
+    accounts.removeWhere((element) => element['login'] == loginName);
+    accounts.add({
+      'login': loginName,
+      'token': tokenVal,
+      'avatarUrl': avatar,
+    });
+    unawaited(_saveAccountsToPrefs());
   }
 
   Future<bool> acceptToken(String value) async {
@@ -98,6 +186,29 @@ class AppState extends ChangeNotifier {
       avatarUrl = user['avatar_url'] as String?;
       currentUser = Map<String, dynamic>.from(user);
       selectedOwner = login;
+      tokenValidated = true;
+      tokenStatus = login == null ? 'Token 验证成功' : 'Token 验证成功：$login';
+      loading = false;
+
+      _addOrUpdateAccount(login!, cleaned, avatarUrl ?? '');
+
+      notifyListeners();
+      return true;
+    } on SocketException catch (e) {
+      tokenValidated = false;
+      tokenStatus = '已保存 Token，但当前无法连接 GitHub：${_friendlySocketMessage(e)}';
+      loading = false;
+      notifyListeners();
+      return false;
+    } catch (e) {
+      tokenValidated = false;
+      tokenStatus = null;
+      error = _formatTokenError(e);
+      loading = false;
+      notifyListeners();
+      return false;
+    }
+  }
       tokenValidated = true;
       tokenStatus = login == null ? 'Token 验证成功' : 'Token 验证成功：$login';
       loading = false;

@@ -36,6 +36,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   late final Animation<double>   _rightSlide;
   Timer? _buildPollTimer;
 
+  double? _customLeftWidth;
+  double? _customRightWidth;
+
   // GlobalKey 用于调用 EditorScreen 的方法
   final _editorKey = GlobalKey<EditorScreenState>();
 
@@ -244,53 +247,104 @@ Future<void> _pollBuild(AppState state, BuildCenterState build) async {
         : Colors.black.withOpacity(0.07);
     final shadow = const Color(0xFF3B8FC7);
 
+    // 我们在这里加上拉动边缘来动态调整整体显示宽度的机制
     return SlideTransition(
       position: Tween<Offset>(
         begin: Offset(fromLeft ? -1.0 : 1.0, 0),
         end: Offset.zero,
       ).animate(anim),
-      child: Container(
-        width: width,
-        decoration: BoxDecoration(
-          color: bg,
-          border: fromLeft
-              ? Border(right: BorderSide(color: border))
-              : Border(left:  BorderSide(color: border)),
-          boxShadow: [
-            BoxShadow(
-              color: shadow.withOpacity(isDark ? 0.22 : 0.14),
-              blurRadius: 32,
-              offset: Offset(fromLeft ? 8 : -8, 0),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            width: width,
+            decoration: BoxDecoration(
+              color: bg,
+              border: fromLeft
+                  ? Border(right: BorderSide(color: border))
+                  : Border(left:  BorderSide(color: border)),
+              boxShadow: [
+                BoxShadow(
+                  color: shadow.withOpacity(isDark ? 0.22 : 0.14),
+                  blurRadius: 32,
+                  offset: Offset(fromLeft ? 8 : -8, 0),
+                ),
+              ],
             ),
-          ],
-        ),
-        child: Column(
-          children: [
-            // 面板标题栏（含 SafeArea 顶部）
-            SafeArea(
-              bottom: false,
-              child: Container(
-                height: 52,
-                padding: const EdgeInsets.fromLTRB(16, 0, 8, 0),
-                child: Row(
-                  children: [
-                    Text(title,
-                        style: const TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.w900)),
-                    const Spacer(),
-                    MxIconBtn(
-                        icon: Icons.close_rounded,
-                        onPressed: onClose,
-                        tooltip: '关闭',
-                        size: 36),
-                  ],
+            child: Column(
+              children: [
+                // 面板标题栏（含 SafeArea 顶部）
+                SafeArea(
+                  bottom: false,
+                  child: Container(
+                    height: 52,
+                    padding: const EdgeInsets.fromLTRB(16, 0, 8, 0),
+                    child: Row(
+                      children: [
+                        Text(title,
+                            style: const TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.w900)),
+                        const Spacer(),
+                        MxIconBtn(
+                            icon: Icons.close_rounded,
+                            onPressed: onClose,
+                            tooltip: '关闭',
+                            size: 36),
+                      ],
+                    ),
+                  ),
+                ),
+                // 面板内容
+                Expanded(child: child),
+              ],
+            ),
+          ),
+          // vscode 风格的拉动边缘
+          Positioned(
+            left: fromLeft ? null : -6,
+            right: fromLeft ? -6 : null,
+            top: 0,
+            bottom: 0,
+            width: 12,
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onHorizontalDragUpdate: (details) {
+                final sw = MediaQuery.of(context).size.width;
+                setState(() {
+                  if (fromLeft) {
+                    // 左侧面板，向右拉增加宽度
+                    double next = _customLeftWidth ?? width;
+                    next += details.delta.dx;
+                    // 宽度限制在 0.2sw ~ 0.9sw 之间
+                    if (next >= sw * 0.2 && next <= sw * 0.9) {
+                      _customLeftWidth = next;
+                    }
+                  } else {
+                    // 右侧面板，向左拉增加宽度
+                    double next = _customRightWidth ?? width;
+                    next -= details.delta.dx;
+                    if (next >= sw * 0.2 && next <= sw * 0.9) {
+                      _customRightWidth = next;
+                    }
+                  }
+                });
+              },
+              child: MouseRegion(
+                cursor: SystemMouseCursors.resizeLeftRight,
+                child: Center(
+                  child: Container(
+                    width: 3,
+                    height: 100,
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white.withOpacity(0.12) : Colors.black.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                  ),
                 ),
               ),
             ),
-            // 面板内容
-            Expanded(child: child),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -309,8 +363,8 @@ Future<void> _pollBuild(AppState state, BuildCenterState build) async {
     final sw     = mq.size.width;
     final topPad = mq.padding.top; // 状态栏高度
 
-    final leftW  = sw * 0.56;
-    final rightW = sw * 0.78;
+    final leftW  = _customLeftWidth ?? (sw * 0.56);
+    final rightW = _customRightWidth ?? (sw * 0.78);
 
     // 工具栏总高 = 状态栏 + 固定高度
     final toolbarTotal = topPad + _toolbarH;

@@ -15,13 +15,15 @@ class _WavePainter extends CustomPainter {
     required this.diagnostics,
     required this.baseStyle,
     required this.scrollOffset,
+    required this.fontSize,
   });
   final String text;
   final List<EditorDiagnostic> diagnostics;
   final TextStyle baseStyle;
   final double scrollOffset;
+  final double fontSize;
 
-  double get _lineHeight => (baseStyle.fontSize ?? 13) * (baseStyle.height ?? 1.55);
+  double get _lineHeight => fontSize * (baseStyle.height ?? 1.55);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -71,6 +73,7 @@ class _LineNumberGutter extends StatelessWidget {
     required this.backgroundColor,
     required this.textColor,
     required this.textStyle,
+    required this.fontSize,
   });
 
   final int lineCount;
@@ -78,6 +81,7 @@ class _LineNumberGutter extends StatelessWidget {
   final Color backgroundColor;
   final Color textColor;
   final TextStyle textStyle;
+  final double fontSize;
 
   @override
   Widget build(BuildContext context) {
@@ -92,6 +96,7 @@ class _LineNumberGutter extends StatelessWidget {
             scrollOffset: scrollController.hasClients ? scrollController.offset : 0,
             textColor: textColor,
             textStyle: textStyle,
+            fontSize: fontSize,
           ),
         ),
       ),
@@ -105,14 +110,16 @@ class _LineNumberPainter extends CustomPainter {
     required this.scrollOffset,
     required this.textColor,
     required this.textStyle,
+    required this.fontSize,
   });
 
   final int lineCount;
   final double scrollOffset;
   final Color textColor;
   final TextStyle textStyle;
+  final double fontSize;
 
-  double get _lineHeight => (textStyle.fontSize ?? 13) * (textStyle.height ?? 1.55);
+  double get _lineHeight => fontSize * (textStyle.height ?? 1.55);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -145,6 +152,7 @@ class EditorScreenState extends State<EditorScreen> {
   final lineJumpController = TextEditingController();
   final _editorScroll     = ScrollController();
   bool showFind = false;
+  double _editorFontSize = 13.0; // 支持手势缩放
 
   @override
   void initState() {
@@ -450,7 +458,7 @@ $fileContent
     final gutterText  = isDark ? const Color(0xFF4A6A80) : const Color(0xFF8A9BAA);
     final editorText  = isDark ? const Color(0xFFD4E8F5) : const Color(0xFF1A2B38);
     contentController.baseStyle = TextStyle(
-        fontFamily: 'monospace', fontSize: 13, height: 1.55, color: editorText);
+        fontFamily: 'monospace', fontSize: _editorFontSize, height: 1.55, color: editorText);
     contentController.keywordColor = isDark ? const Color(0xFF82AAFF) : const Color(0xFF245BCB);
     contentController.stringColor = isDark ? const Color(0xFFC3E88D) : const Color(0xFF22863A);
     contentController.commentColor = isDark ? const Color(0xFF637777) : const Color(0xFF6A737D);
@@ -529,6 +537,7 @@ $fileContent
                 backgroundColor: gutterBg,
                 textColor: gutterText,
                 textStyle: contentController.baseStyle,
+                fontSize: _editorFontSize,
               ),
 
               // 代码区（横向可滚动 + 错误波浪线 overlay + 错误点击区域）
@@ -543,35 +552,44 @@ $fileContent
                       radius: const Radius.circular(999),
                       thumbColor: scheme.primary.withOpacity(0.58),
                       minOverscrollLength: 20,
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: SizedBox(
-                          width: 1200, // 足够宽，允许长行横向滚动
-                          child: GestureDetector(
-                            onTap: contentController.clearHighlight,
-                            child: TextField(
-                              controller: contentController,
-                              readOnly: editor.readOnly,
-                              scrollController: _editorScroll,
-                              expands: true,
-                              maxLines: null,
-                              minLines: null,
-                              keyboardType: TextInputType.multiline,
-                              textAlignVertical: TextAlignVertical.top,
-                              style: contentController.baseStyle,
-                              decoration: InputDecoration(
-                                filled: true,
-                                fillColor: editorBg,
-                                border: InputBorder.none,
-                                enabledBorder: InputBorder.none,
-                                focusedBorder: InputBorder.none,
-                                disabledBorder: InputBorder.none,
-                                errorBorder: InputBorder.none,
-                                focusedErrorBorder: InputBorder.none,
-                                contentPadding: const EdgeInsets.fromLTRB(10, 2, 12, 12),
-                                hintText: null,
+                      child: GestureDetector(
+                        onScaleUpdate: (ScaleUpdateDetails details) {
+                          if (details.scale != 1.0) {
+                            setState(() {
+                              _editorFontSize = (_editorFontSize * details.scale).clamp(8.0, 36.0);
+                            });
+                          }
+                        },
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: SizedBox(
+                            width: 1200, // 足够宽，允许长行横向滚动
+                            child: GestureDetector(
+                              onTap: contentController.clearHighlight,
+                              child: TextField(
+                                controller: contentController,
+                                readOnly: editor.readOnly,
+                                scrollController: _editorScroll,
+                                expands: true,
+                                maxLines: null,
+                                minLines: null,
+                                keyboardType: TextInputType.multiline,
+                                textAlignVertical: TextAlignVertical.top,
+                                style: contentController.baseStyle,
+                                decoration: InputDecoration(
+                                  filled: true,
+                                  fillColor: editorBg,
+                                  border: InputBorder.none,
+                                  enabledBorder: InputBorder.none,
+                                  focusedBorder: InputBorder.none,
+                                  disabledBorder: InputBorder.none,
+                                  errorBorder: InputBorder.none,
+                                  focusedErrorBorder: InputBorder.none,
+                                  contentPadding: const EdgeInsets.fromLTRB(10, 2, 12, 12),
+                                  hintText: null,
+                                ),
+                                onChanged: (v) { contentController.clearHighlight(); editor.updateContent(v); },
                               ),
-                              onChanged: (v) { contentController.clearHighlight(); editor.updateContent(v); },
                             ),
                           ),
                         ),
@@ -587,6 +605,7 @@ $fileContent
                               diagnostics: diagnostics,
                               baseStyle: contentController.baseStyle,
                               scrollOffset: _editorScroll.hasClients ? _editorScroll.offset : 0,
+                              fontSize: _editorFontSize,
                             ),
                           ),
                         ),
