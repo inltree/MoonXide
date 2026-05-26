@@ -152,10 +152,7 @@ class EditorScreenState extends State<EditorScreen> {
   final lineJumpController = TextEditingController();
   final _editorScroll     = ScrollController();
   bool showFind = false;
-  double _editorFontSize = 13.0; // 支持手势缩放
-
-  // 用于实现高级多指捏合放大、缩小、以及放大后随意双轴拖拽浏览的矩阵控制器
-  final TransformationController _transformationController = TransformationController();
+  double _editorFontSize = 13.0; // 默认字号
 
   @override
   void initState() {
@@ -175,7 +172,6 @@ class EditorScreenState extends State<EditorScreen> {
     replaceController.dispose();
     lineJumpController.dispose();
     _editorScroll.dispose();
-    _transformationController.dispose();
     super.dispose();
   }
 
@@ -546,85 +542,142 @@ $fileContent
 
               // 代码区（横向可滚动 + 错误波浪线 overlay + 错误点击区域）
               Expanded(
-                child: InteractiveViewer(
-                  transformationController: _transformationController,
-                  panEnabled: true,      // 放大后允许自由双轴拖拽浏览
-                  scaleEnabled: true,    // 允许双指捏合随意手势缩放
-                  minScale: 0.5,
-                  maxScale: 4.0,
-                  boundaryMargin: const EdgeInsets.all(80.0), // 留出边缘空间防止生硬回弹
-                  child: Stack(
-                    children: [
-                      RawScrollbar(
-                        controller: _editorScroll,
-                        thumbVisibility: true,
-                        interactive: true,
-                        thickness: 6,
-                        radius: const Radius.circular(999),
-                        thumbColor: scheme.primary.withOpacity(0.58),
-                        minOverscrollLength: 20,
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: SizedBox(
-                            width: 1200, // 足够宽，允许长行横向滚动
-                            child: GestureDetector(
-                              onTap: contentController.clearHighlight,
-                              child: TextField(
-                                controller: contentController,
-                                readOnly: editor.readOnly,
-                                scrollController: _editorScroll,
-                                expands: true,
-                                maxLines: null,
-                                minLines: null,
-                                keyboardType: TextInputType.multiline,
-                                textAlignVertical: TextAlignVertical.top,
-                                style: contentController.baseStyle,
-                                decoration: InputDecoration(
-                                  filled: true,
-                                  fillColor: editorBg,
-                                  border: InputBorder.none,
-                                  enabledBorder: InputBorder.none,
-                                  focusedBorder: InputBorder.none,
-                                  disabledBorder: InputBorder.none,
-                                  errorBorder: InputBorder.none,
-                                  focusedErrorBorder: InputBorder.none,
-                                  contentPadding: const EdgeInsets.fromLTRB(10, 2, 12, 12),
-                                  hintText: null,
-                                ),
-                                onChanged: (v) { contentController.clearHighlight(); editor.updateContent(v); },
+                child: Stack(
+                  children: [
+                    RawScrollbar(
+                      controller: _editorScroll,
+                      thumbVisibility: true,
+                      interactive: true,
+                      thickness: 6,
+                      radius: const Radius.circular(999),
+                      thumbColor: scheme.primary.withOpacity(0.58),
+                      minOverscrollLength: 20,
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: SizedBox(
+                          width: 1200, // 足够宽，允许长行横向滚动
+                          child: GestureDetector(
+                            onTap: contentController.clearHighlight,
+                            child: TextField(
+                              controller: contentController,
+                              readOnly: editor.readOnly,
+                              scrollController: _editorScroll,
+                              expands: true,
+                              maxLines: null,
+                              minLines: null,
+                              keyboardType: TextInputType.multiline,
+                              textAlignVertical: TextAlignVertical.top,
+                              style: contentController.baseStyle,
+                              decoration: InputDecoration(
+                                filled: true,
+                                fillColor: editorBg,
+                                border: InputBorder.none,
+                                enabledBorder: InputBorder.none,
+                                focusedBorder: InputBorder.none,
+                                disabledBorder: InputBorder.none,
+                                errorBorder: InputBorder.none,
+                                focusedErrorBorder: InputBorder.none,
+                                contentPadding: const EdgeInsets.fromLTRB(10, 2, 12, 12),
+                                hintText: null,
                               ),
+                              onChanged: (v) { contentController.clearHighlight(); editor.updateContent(v); },
                             ),
                           ),
                         ),
                       ),
-                      // 错误波浪线 overlay
-                      if (diagnostics.isNotEmpty)
-                        Positioned.fill(
-                          child: IgnorePointer(
-                            child: CustomPaint(
-                              painter: _WavePainter(
-                                text: contentController.text,
-                                diagnostics: diagnostics,
-                                baseStyle: contentController.baseStyle,
-                                scrollOffset: _editorScroll.hasClients ? _editorScroll.offset : 0,
-                                fontSize: _editorFontSize,
-                              ),
+                    ),
+                    // 错误波浪线 overlay
+                    if (diagnostics.isNotEmpty)
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: CustomPaint(
+                            painter: _WavePainter(
+                              text: contentController.text,
+                              diagnostics: diagnostics,
+                              baseStyle: contentController.baseStyle,
+                              scrollOffset: _editorScroll.hasClients ? _editorScroll.offset : 0,
+                              fontSize: _editorFontSize,
                             ),
                           ),
                         ),
-                      // 错误点击热区
-                      if (diagnostics.isNotEmpty)
-                        Positioned.fill(
-                          child: _ErrorTapLayer(
-                            text: contentController.text,
-                            diagnostics: diagnostics,
-                            scrollOffset: _editorScroll.hasClients ? _editorScroll.offset : 0,
-                            baseStyle: contentController.baseStyle,
-                            onTapError: (diag) => _handleErrorTap(context, diag, editor),
-                          ),
+                      ),
+                    // 错误点击热区
+                    if (diagnostics.isNotEmpty)
+                      Positioned.fill(
+                        child: _ErrorTapLayer(
+                          text: contentController.text,
+                          diagnostics: diagnostics,
+                          scrollOffset: _editorScroll.hasClients ? _editorScroll.offset : 0,
+                          baseStyle: contentController.baseStyle,
+                          onTapError: (diag) => _handleErrorTap(context, diag, editor),
                         ),
-                    ],
-                  ),
+                      ),
+
+                    // ── 浮动快捷滚动滑块（主页面中间右侧放一个滚动条，用户可以触摸进行滑动滚动条进行快速浏览定位代码） ──
+                    Positioned(
+                      right: 4,
+                      top: 40,
+                      bottom: 40,
+                      width: 28,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: isDark ? Colors.black.withOpacity(0.35) : Colors.white.withOpacity(0.35),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: scheme.primary.withOpacity(0.12)),
+                        ),
+                        child: LayoutBuilder(
+                          builder: (ctx, constraints) {
+                            return GestureDetector(
+                              behavior: HitTestBehavior.translucent,
+                              onVerticalDragUpdate: (details) {
+                                if (!_editorScroll.hasClients) return;
+                                final localY = details.localPosition.dy;
+                                final totalH = constraints.maxHeight;
+                                final pct = (localY / totalH).clamp(0.0, 1.0);
+                                final targetScroll = pct * _editorScroll.position.maxScrollExtent;
+                                _editorScroll.jumpTo(targetScroll);
+                              },
+                              child: AnimatedBuilder(
+                                animation: _editorScroll,
+                                builder: (context, _) {
+                                  double pct = 0.0;
+                                  if (_editorScroll.hasClients && _editorScroll.position.maxScrollExtent > 0) {
+                                    pct = (_editorScroll.offset / _editorScroll.position.maxScrollExtent).clamp(0.0, 1.0);
+                                  }
+                                  final trackH = constraints.maxHeight;
+                                  final thumbH = 36.0;
+                                  final topOffset = (pct * (trackH - thumbH)).clamp(0.0, trackH - thumbH);
+                                  return Stack(
+                                    children: [
+                                      Positioned(
+                                        top: topOffset,
+                                        left: 4,
+                                        right: 4,
+                                        height: thumbH,
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                            color: scheme.primary.withOpacity(0.72),
+                                            borderRadius: BorderRadius.circular(99),
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: scheme.primary.withOpacity(0.3),
+                                                blurRadius: 6,
+                                              )
+                                            ],
+                                          ),
+                                          child: const Icon(Icons.unfold_more_rounded, size: 14, color: Colors.white),
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                },
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],

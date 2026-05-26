@@ -638,11 +638,11 @@ class _AvatarButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Tooltip(
-      message: '切换/管理账号',
+      message: 'GitHub 主页',
       child: InkWell(
         borderRadius: BorderRadius.circular(999),
         onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const TokenGateScreen()),
+          MaterialPageRoute(builder: (_) => ProfileScreen(state: state)),
         ),
         child: Container(
           width: 34,
