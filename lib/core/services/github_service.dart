@@ -101,8 +101,9 @@ class GithubService {
     await _request('DELETE', '/repos/$owner/$repo/contents/${_contentPath(path)}', body: {'message': message, 'sha': sha});
   }
 
-  Future<void> dispatchWorkflow({required String owner, required String repo, required String workflowFile, String ref = 'main', required Map<String, dynamic> inputs}) async {
-    await _request('POST', '/repos/$owner/$repo/actions/workflows/$workflowFile/dispatches', body: {'ref': ref, 'inputs': inputs});
+  Future<void> dispatchWorkflow({required String owner, required String repo, required String workflowFile, String ref = 'main', required Map<String, dynamic> inputs, bool isDefaultWorkflow = false}) async {
+    final body = isDefaultWorkflow ? {'ref': ref} : {'ref': ref, 'inputs': inputs};
+    await _request('POST', '/repos/$owner/$repo/actions/workflows/$workflowFile/dispatches', body: body);
   }
 
   Future<List<Map<String, dynamic>>> listWorkflows(String owner, String repo) async {
@@ -116,7 +117,7 @@ class GithubService {
     for (final candidate in candidates) {
       final found = workflows.where((w) => w['path']?.toString().endsWith('/$candidate') == true).toList();
       if (found.isNotEmpty) {
-        await dispatchWorkflow(owner: owner, repo: repo, workflowFile: candidate, ref: ref, inputs: (candidate == 'cmake.yml' || isDefaultWorkflow) ? {} : inputs);
+        await dispatchWorkflow(owner: owner, repo: repo, workflowFile: candidate, ref: ref, inputs: (candidate == 'cmake.yml' || isDefaultWorkflow) ? {} : inputs, isDefaultWorkflow: isDefaultWorkflow);
         return candidate;
       }
     }
