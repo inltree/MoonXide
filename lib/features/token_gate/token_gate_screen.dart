@@ -236,7 +236,6 @@ class _TokenGateScreenState extends State<TokenGateScreen> {
               if (state.error != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
-                  textAlign: TextAlign.center,
                   child: Text(
                     state.error!,
                     textAlign: TextAlign.center,
@@ -250,7 +249,6 @@ class _TokenGateScreenState extends State<TokenGateScreen> {
               if (state.tokenStatus != null && state.tokenValidated)
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
-                  textAlign: TextAlign.center,
                   child: Text(
                     state.tokenStatus!,
                     textAlign: TextAlign.center,
