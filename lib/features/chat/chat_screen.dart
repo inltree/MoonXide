@@ -75,6 +75,9 @@ class _ChatScreenState extends State<ChatScreen> {
     });
 
     workflow.createTask(text);
+    // 异步通过 AI 进行真正的“开发任务流程规划”，生成更贴切的动态步骤规划表，并覆盖默认占位符。
+    _generateDynamicPlan(text, workflow, aiConfig);
+
     workflow.startAutoRun();
     await chat.sendUserText(text, aiConfig);
     _scrollToBottom();
@@ -153,6 +156,70 @@ class _ChatScreenState extends State<ChatScreen> {
     } catch (_) {
       return rawBody;
     }
+  }
+
+void _generateDynamicPlan(String instruction, AiWorkflowEngine workflow, AiConfigState aiConfig) {
+    Future.microtask(() async {
+      try {
+        final cfg = aiConfig.config;
+        if (cfg.baseUrl.trim().isEmpty || cfg.apiKey.trim().isEmpty) return;
+
+        final systemPrompt = '你是一个专业的软件开发工作流规划师。请阅读用户提出的需求，将其拆解为 3 至 6 个极其精确、敏捷的实现步骤。\n'
+            '你的输出必须是严格的 JSON 格式（包含一个 steps 数组，每个 step 包含 title 和 detail 字段）。\n'
+            '例如：\n'
+            '{\n'
+            '  "steps": [\n'
+            '    {"title": "🔍 探索文件结构", "detail": "查找与目标需求相关的关键源文件"},\n'
+            '    {"title": "✍️ 编写代码细节", "detail": "编辑对应 Dart 类以实现目标业务逻辑"},\n'
+            '    {"title": "🧪 校验与推送", "detail": "提交代码并自动触发 Actions 流水线"}\n'
+            '  ]\n'
+            '}\n'
+            '不要输出任何其他 Markdown 标记、前后说明或包裹，只需返回合法的 JSON 字符串。';
+
+        final cfgPlanner = cfg.copyWith(systemPrompt: systemPrompt, stream: false);
+        final raw = await AiApiClient().sendWithHistory(cfgPlanner, [], '请根据以下用户需求规划敏捷步骤：\n"$instruction"');
+        final reply = _extractReply(raw, false).trim();
+        
+        // 兼容某些模型在 JSON 外面包裹 ```json ... ```
+        var cleanJson = reply;
+        if (cleanJson.startsWith('```json')) {
+          cleanJson = cleanJson.substring(7);
+        }
+        if (cleanJson.endsWith('```')) {
+          cleanJson = cleanJson.substring(0, cleanJson.length - 3);
+        }
+        cleanJson = cleanJson.trim();
+
+        final parsed = jsonDecode(cleanJson);
+        if (parsed is Map && parsed['steps'] is List) {
+          final rawSteps = parsed['steps'] as List;
+          final List<AiTaskStep> steps = [];
+          for (final rs in rawSteps) {
+            if (rs is Map) {
+              steps.add(AiTaskStep(
+                id: const Uuid().v4(),
+                title: (rs['title'] ?? '未命名步骤').toString(),
+                detail: (rs['detail'] ?? '').toString(),
+                status: AiTaskStepStatus.pending,
+              ));
+            }
+          }
+          if (steps.isNotEmpty && mounted) {
+            workflow.updatePlanSteps(steps);
+          }
+        }
+      } catch (e) {
+        // 如果动态规划失败，静默回退默认敏捷轻量大纲，不阻塞主对话
+        if (mounted) {
+          final fallbackSteps = <AiTaskStep>[
+            AiTaskStep(id: const Uuid().v4(), title: '🔍 检查工作区', detail: '读取工作区与文件树状态。', status: AiTaskStepStatus.pending),
+            AiTaskStep(id: const Uuid().v4(), title: '🛠️ 开发与修改', detail: '调用特定工具执行开发与代码编辑。', status: AiTaskStepStatus.pending),
+            AiTaskStep(id: const Uuid().v4(), title: '🚀 推送与编译', detail: '自动提交并提交至云端进行构建发布。', status: AiTaskStepStatus.pending),
+          ];
+          workflow.updatePlanSteps(fallbackSteps);
+        }
+      }
+    });
   }
 
   Future<String> _handleToolCalls(ChatConversationState chat) async {
@@ -336,17 +403,6 @@ class _ChatScreenState extends State<ChatScreen> {
           MxIconBtn(icon: Icons.undo_rounded, onPressed: chat.rollbackLastMessage, tooltip: '撤回', size: 34),
         ]),
       ),
-      if (_toolCalls.isNotEmpty)
-        SizedBox(
-          height: 118,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.fromLTRB(12, 2, 12, 6),
-            itemCount: _toolCalls.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 8),
-            itemBuilder: (_, i) => _ToolCallCard(call: _toolCalls[i]),
-          ),
-        ),
       Expanded(
         child: chat.messages.isEmpty
             ? const MxEmpty(icon: Icons.auto_awesome_rounded, label: '开始对话', hint: '输入问题或开发任务')
@@ -376,11 +432,26 @@ class _ChatScreenState extends State<ChatScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               if (plan != null) ...[
-                _PlanCapsule(
-                  label: _planProgressText(plan),
-                  running: workflow.running,
-                  finished: plan.finished,
-                  onTap: () => _showPlanSheet(workflow),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: _PlanCard(
+                    plan: plan,
+                    workflow: workflow,
+                    scheme: scheme,
+                    stepIcon: _stepIcon,
+                    stepColor: _stepColor,
+                    compact: true,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: _PlanCapsule(
+                    label: _planProgressText(plan),
+                    running: workflow.running,
+                    finished: plan.finished,
+                    onTap: () => _showPlanSheet(workflow),
+                  ),
                 ),
                 const SizedBox(height: 6),
               ],
@@ -605,6 +676,54 @@ class _PlanCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (compact) {
+      // 迷你小菜单模式：只横向展示简短的图标列表和总体进度
+      final steps = plan.steps as List;
+      return Container(
+        margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: (Theme.of(context).brightness == Brightness.dark ? const Color(0xFF0F2230) : Colors.white).withOpacity(0.92),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: scheme.outlineVariant.withOpacity(0.35)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.auto_awesome_rounded, size: 14, color: scheme.primary),
+            const SizedBox(width: 6),
+            const Text('规划进度：', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
+            const SizedBox(width: 2),
+            ...steps.map((step) {
+              final idx = steps.indexOf(step);
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 3),
+                child: Tooltip(
+                  message: '${step.title}\n${step.detail}',
+                  child: Icon(
+                    stepIcon(step.status),
+                    size: 14,
+                    color: stepColor(context, step.status),
+                  ),
+                ),
+              );
+            }),
+            const SizedBox(width: 8),
+            Container(
+              width: 1,
+              height: 12,
+              color: scheme.onSurface.withOpacity(0.12),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              '${steps.where((e) => e.status == AiTaskStepStatus.completed).length}/${steps.length}',
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: scheme.primary),
+            ),
+          ],
+        ),
+      );
+    }
+
     final body = MxCard(
       padding: EdgeInsets.all(compact ? 12 : 14),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

@@ -110,13 +110,13 @@ class GithubService {
     return List<Map<String, dynamic>>.from(data['workflows'] as List);
   }
 
-  Future<String> dispatchBestBuildWorkflow({required String owner, required String repo, String ref = 'main', required Map<String, dynamic> inputs}) async {
+  Future<String> dispatchBestBuildWorkflow({required String owner, required String repo, String ref = 'main', required Map<String, dynamic> inputs, bool isDefaultWorkflow = false}) async {
     final workflows = await listWorkflows(owner, repo);
     final candidates = ['android-apk.yml', 'build.yml', 'cmake.yml'];
     for (final candidate in candidates) {
       final found = workflows.where((w) => w['path']?.toString().endsWith('/$candidate') == true).toList();
       if (found.isNotEmpty) {
-        await dispatchWorkflow(owner: owner, repo: repo, workflowFile: candidate, ref: ref, inputs: candidate == 'cmake.yml' ? {} : inputs);
+        await dispatchWorkflow(owner: owner, repo: repo, workflowFile: candidate, ref: ref, inputs: (candidate == 'cmake.yml' || isDefaultWorkflow) ? {} : inputs);
         return candidate;
       }
     }

@@ -22,9 +22,11 @@ class BuildScreen extends StatelessWidget {
       return;
     }
     try {
+      final isDefault = state.buildProfile == BuildProfile.workflowDefault;
       final workflow = await state.github!.dispatchBestBuildWorkflow(
         owner: owner, repo: repo,
-        inputs: {
+        isDefaultWorkflow: isDefault,
+        inputs: isDefault ? {} : {
           'build_type':      state.buildProfile == BuildProfile.debug ? 'debug' : 'release',
           'publish_release': 'false',
         },
@@ -208,6 +210,13 @@ class BuildScreen extends StatelessWidget {
                 icon: Icons.rocket_launch_rounded,
                 active: state.buildProfile == BuildProfile.release,
                 onTap: () => state.setBuildProfile(BuildProfile.release),
+              ),
+              const SizedBox(width: 10),
+              _ProfileChip(
+                label: '工作流默认',
+                icon: Icons.settings_backup_restore_rounded,
+                active: state.buildProfile == BuildProfile.workflowDefault,
+                onTap: () => state.setBuildProfile(BuildProfile.workflowDefault),
               ),
             ],
           ),

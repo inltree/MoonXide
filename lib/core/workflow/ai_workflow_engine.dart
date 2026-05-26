@@ -1,5 +1,5 @@
-import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:uuid/uuid.dart';
 import 'ai_task_plan.dart';
 import 'ai_task_planner.dart';
 import 'ai_task_step.dart';
@@ -27,10 +27,27 @@ class AiWorkflowEngine extends ChangeNotifier {
   }
 
   void createTask(String instruction) {
-    currentPlan = planner.createPlan(instruction);
+    // 初始规划表：由大纲占位，提示规划中。我们随后通过 AI 调用进行完全动态的主动规划和填充。
+    final id = const Uuid().v4();
+    final steps = <AiTaskStep>[
+      AiTaskStep(id: const Uuid().v4(), title: '🤔 理解并规划', detail: '深度剖析任务指令："$instruction"，正在设计最优的敏捷实现路径...'),
+    ];
+    currentPlan = AiTaskPlan(
+      id: id,
+      userInstruction: instruction,
+      goal: instruction.isEmpty ? '完成开发任务' : instruction,
+      steps: steps,
+    );
     eventLog = '已创建任务：${currentPlan!.goal}';
     running = false;
     paused = false;
+    notifyListeners();
+  }
+
+  /// 允许外部或 AI 规划后覆盖/更新完整的规划步骤
+  void updatePlanSteps(List<AiTaskStep> steps) {
+    if (currentPlan == null) return;
+    currentPlan = currentPlan!.copyWith(steps: steps, finished: steps.every((e) => e.status == AiTaskStepStatus.completed));
     notifyListeners();
   }
 
