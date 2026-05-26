@@ -46,6 +46,9 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
   static String? _cachedRepoKey;
   static final Map<String, String> _selectedPathByRepo = {};
 
+  final _scrollH = ScrollController();
+  final _scrollV = ScrollController();
+
   List<Map<String, dynamic>> _repos = _cachedRepos;
   List<_TreeNode> _roots = [];
   final Map<String, List<_TreeNode>> _treeCache = _cachedTree;
@@ -86,6 +89,8 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     _renameCtrl.dispose();
     _newFileCtrl.dispose();
     _newFolderCtrl.dispose();
+    _scrollH.dispose();
+    _scrollV.dispose();
     super.dispose();
   }
 
@@ -629,20 +634,39 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
               ? const MxEmpty(icon: Icons.folder_off_rounded, label: '未选择仓库', hint: '从上方选择、创建或管理 GitHub 仓库')
               : _roots.isEmpty && !_loadingTree
                   ? const MxEmpty(icon: Icons.description_outlined, label: '仓库为空', hint: '上传文件或等待初始化')
-                  : ListView.builder(
-                      padding: const EdgeInsets.only(bottom: 24),
-                      itemCount: _roots.length,
-itemBuilder: (_, i) => _TreeTile(
-                         node: _roots[i],
-                         depth: 0,
-                         onToggle: _toggleDir,
-                         onOpen: _openFile,
-                         scheme: scheme,
-                         isDark: isDark,
-                         selectedPath: effectiveSelectedPath,
-                         openingPath: _openingPath,
-                         onLongPress: _showFileMenu,
-                       ),
+                  : Scrollbar(
+                      controller: _scrollV,
+                      child: SingleChildScrollView(
+                        controller: _scrollV,
+                        child: Scrollbar(
+                          controller: _scrollH,
+                          notificationPredicate: (n) => n.depth == 1,
+                          child: SingleChildScrollView(
+                            controller: _scrollH,
+                            scrollDirection: Axis.horizontal,
+                            child: SizedBox(
+                              width: 600, // 足够宽，允许左右滚动长文件名
+                              child: ListView.builder(
+                                shrinkWrap: true,
+                                physics: const NeverScrollableScrollPhysics(),
+                                padding: const EdgeInsets.only(bottom: 24),
+                                itemCount: _roots.length,
+                                itemBuilder: (_, i) => _TreeTile(
+                                  node: _roots[i],
+                                  depth: 0,
+                                  onToggle: _toggleDir,
+                                  onOpen: _openFile,
+                                  scheme: scheme,
+                                  isDark: isDark,
+                                  selectedPath: effectiveSelectedPath,
+                                  openingPath: _openingPath,
+                                  onLongPress: _showFileMenu,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
         ),
       ],
@@ -1146,7 +1170,7 @@ class _TreeTileState extends State<_TreeTile> {
               const SizedBox(width: 2),
               _FileGlyph(icon: _icon(), color: _iconColor(), badge: _languageBadge(), ext: node.name.contains('.') ? node.name.toLowerCase().split('.').last : null),
               const SizedBox(width: 6),
-              Expanded(child: Text(node.name, maxLines: 2, overflow: TextOverflow.ellipsis,
+              Expanded(child: Text(node.name, maxLines: 1, overflow: TextOverflow.visible,
                   style: TextStyle(fontSize: 13,
                       fontWeight: node.isDir ? FontWeight.w600 : FontWeight.w400,
                       color: isSelected

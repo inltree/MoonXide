@@ -21,7 +21,6 @@ class BuildScreen extends StatelessWidget {
       build.setStatus('请先选择仓库');
       return;
     }
-    build.start('正在触发 GitHub Actions…');
     try {
       final workflow = await state.github!.dispatchBestBuildWorkflow(
         owner: owner, repo: repo,
@@ -30,7 +29,8 @@ class BuildScreen extends StatelessWidget {
           'publish_release': 'false',
         },
       );
-      build.updateProgress(statusText: '已触发 $workflow，等待 GitHub Actions 响应…', value: 0.12);
+      build.start('正在触发 GitHub Actions…', owner: owner, repo: repo, workflow: workflow);
+      build.updateProgress(statusText: '已触发 $workflow，正在轮询进度…', value: 0.12);
     } catch (e) {
       build.fail('触发失败：$e');
     }
@@ -38,24 +38,48 @@ class BuildScreen extends StatelessWidget {
 
   Future<void> _poll(BuildContext context) async {
     final build = context.read<BuildCenterState>();
-    final owner = state.selectedOwner;
-    final repo  = state.selectedRepo;
+    final owner = build.buildOwner ?? state.selectedOwner;
+    final repo  = build.buildRepo ?? state.selectedRepo;
     if (owner == null || repo == null || state.github == null) return;
     build.setStatus('正在读取最新构建…');
     try {
       final runs = await state.github!.listWorkflowRuns(owner, repo);
       if (runs.isEmpty) { build.setStatus('没有构建记录'); return; }
-      final run        = runs.first;
+      
+      Map<String, dynamic>? run;
+      if (build.workflowFile != null) {
+        final filtered = runs.where((r) => r['path']?.toString().endsWith('/${build.workflowFile}') == true).toList();
+        if (filtered.isNotEmpty) {
+          run = filtered.first;
+        }
+      }
+      run ??= runs.first;
+
       final runId      = run['id'] as int;
       final status     = run['status'];
       final conclusion = run['conclusion'];
       final htmlUrl    = run['html_url'];
       
+      // 如果有开始触发的时刻，校验本次构建的创建时刻或 ID 以避免拿旧数据
+      if (build.triggerStartedAt != null) {
+        final createdAtStr = run['created_at']?.toString();
+        if (createdAtStr != null) {
+          final createdAt = DateTime.tryParse(createdAtStr);
+          if (createdAt != null && createdAt.isBefore(build.triggerStartedAt!.subtract(const Duration(seconds: 15)))) {
+            build.updateProgress(
+              statusText: '正在等待 GitHub Actions 响应并分配新的构建编号…',
+              value: 0.12,
+            );
+            return;
+          }
+        }
+      }
+
       double progress = 0.12;
       String? currentStep;
       if (status == 'completed') {
         progress = 1.0;
-      } else if (status == 'in_progress') {
+      } else if (status == 'in_progress' || status == 'queued') {
         try {
           final jobs = await state.github!.listWorkflowJobs(owner, repo, runId);
           if (jobs.isNotEmpty) {
@@ -126,13 +150,19 @@ class BuildScreen extends StatelessWidget {
     if (build.artifactDownloadUrl == null || state.token == null) return;
     try {
       final fileName = _safeArtifactFileName(build.artifactName);
+      build.startDownload();
       final path = await ArtifactDownloader().download(
-        url: build.artifactDownloadUrl!, token: state.token!, fileName: fileName);
-      build.setArtifact(localPath: path, downloadUrl: build.artifactDownloadUrl, name: build.artifactName);
+        url: build.artifactDownloadUrl!,
+        token: state.token!,
+        fileName: fileName,
+        onProgress: (p) => build.updateDownloadProgress(p),
+      );
+      build.finishDownload(localPath: path);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已下载 GitHub Actions 附件到 $path')));
       }
     } catch (e) {
+      build.failDownload();
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('下载失败：$e')));
       }
@@ -212,7 +242,15 @@ class BuildScreen extends StatelessWidget {
                 Row(children: [
                   Icon(Icons.archive_rounded, color: scheme.primary),
                   const SizedBox(width: 8),
-                  Expanded(child: Text(artifactName, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800))),
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(artifactName, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800)),
+                    if (build.downloadBusy) ...[
+                      const SizedBox(height: 6),
+                      ClipRRect(borderRadius: BorderRadius.circular(99), child: LinearProgressIndicator(value: build.downloadProgress, minHeight: 3)),
+                      const SizedBox(height: 4),
+                      Text('正在下载产物：${(build.downloadProgress * 100).toStringAsFixed(1)}%', style: TextStyle(fontSize: 10, color: scheme.onSurface.withOpacity(0.5))),
+                    ],
+                  ])),
                   const SizedBox(width: 8),
                   MxBadge(localPath == null ? 'GitHub 附件' : '已下载', color: Colors.green),
                 ]),

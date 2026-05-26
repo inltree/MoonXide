@@ -92,10 +92,19 @@ class _ReleaseScreenState extends State<ReleaseScreen> {
         ? 'artifact'
         : build.artifactName!.trim().replaceAll(RegExp(r'[^a-zA-Z0-9._-]+'), '-');
     final fileName = name.toLowerCase().endsWith('.zip') ? name : '$name.zip';
-    final path = await ArtifactDownloader().download(
-      url: build.artifactDownloadUrl!, token: app.token!, fileName: fileName);
-    build.setArtifact(localPath: path, downloadUrl: build.artifactDownloadUrl, name: build.artifactName);
-    await AndroidInstaller().openFile(path);
+    build.startDownload();
+    try {
+      final path = await ArtifactDownloader().download(
+        url: build.artifactDownloadUrl!,
+        token: app.token!,
+        fileName: fileName,
+        onProgress: (p) => build.updateDownloadProgress(p),
+      );
+      build.finishDownload(localPath: path);
+      await AndroidInstaller().openFile(path);
+    } catch (_) {
+      build.failDownload();
+    }
   }
 
   Future<void> _pickReleaseAsset() async {
@@ -134,12 +143,20 @@ class _ReleaseScreenState extends State<ReleaseScreen> {
                 Icon(Icons.archive_rounded, color: scheme.primary),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: Text(
-                    build.artifactLocalPath ?? build.artifactName ?? build.artifactDownloadUrl!,
-                    maxLines: 2, overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(
+            build.artifactLocalPath ?? build.artifactName ?? build.artifactDownloadUrl!,
+            maxLines: 2, overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 12),
+          ),
+          if (build.downloadBusy) ...[
+            const SizedBox(height: 6),
+            ClipRRect(borderRadius: BorderRadius.circular(99), child: LinearProgressIndicator(value: build.downloadProgress, minHeight: 3)),
+            const SizedBox(height: 4),
+            Text('正在下载：${(build.downloadProgress * 100).toStringAsFixed(1)}%', style: TextStyle(fontSize: 10, color: scheme.onSurface.withOpacity(0.5))),
+          ],
+        ]),
+      ),
                 MxIconBtn(
                   icon: Icons.download_rounded,
                   tooltip: '下载/打开 GitHub Actions 附件',

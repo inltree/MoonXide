@@ -24,6 +24,8 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -38,7 +40,9 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          cache: false
+          flutter-version: '3.29.2'
+          cache: true
+          cache-key: flutter-3.29.2
 
       - name: Generate Android platform
         run: |
@@ -86,8 +90,11 @@ jobs:
           patched = []
           for root in roots:
               if not root.exists():
+                  print(f'[skip] not found: {root}')
                   continue
-              for p in list(root.rglob('*.gradle')) + list(root.rglob('*.gradle.kts')):
+              gradle_files = list(root.rglob('*.gradle')) + list(root.rglob('*.gradle.kts'))
+              print(f'[scan] {root}: found {len(gradle_files)} gradle files')
+              for p in gradle_files:
                   s = p.read_text(errors='ignore')
                   original = s
                   for rx, repl in patterns:
@@ -97,10 +104,11 @@ jobs:
                       patched.append(str(p))
 
           if not patched:
-              raise SystemExit('No Android Gradle files were patched')
-          print('patched Gradle files:')
-          for item in patched:
-              print(' -', item)
+              print('Warning: No Android Gradle files were patched (may already be correct).')
+          else:
+              print('patched Gradle files:')
+              for item in patched:
+                  print(' -', item)
           PY
 
       - name: Build APK

@@ -9,6 +9,12 @@ class BuildCenterState extends ChangeNotifier {
   String? artifactLocalPath;
   String? artifactDownloadUrl;
   String? artifactName;
+  bool downloadBusy = false;
+  double downloadProgress = 0;
+  String? buildOwner;
+  String? buildRepo;
+  String? workflowFile;
+  DateTime? triggerStartedAt;
   bool busy = false;
   double progress = 0;
   bool completed = false;
@@ -35,13 +41,19 @@ class BuildCenterState extends ChangeNotifier {
     _noticeIsError = false;
   }
 
-  void start(String value) {
+  void start(String value, {String? owner, String? repo, String? workflow}) {
     status = value;
     busy = true;
     completed = false;
     progress = 0.08;
     outcome = BuildOutcome.running;
     currentStep = null;
+    currentRunId = null;
+    latestRunUrl = null;
+    buildOwner = owner;
+    buildRepo = repo;
+    workflowFile = workflow;
+    triggerStartedAt = DateTime.now();
     artifactLocalPath = null;
     artifactDownloadUrl = null;
     artifactName = null;
@@ -64,6 +76,31 @@ class BuildCenterState extends ChangeNotifier {
     currentRunId = runId ?? currentRunId;
     if (step != null) currentStep = step;
     lastPollAt = DateTime.now();
+    notifyListeners();
+  }
+
+  void updateDownloadProgress(double value) {
+    downloadProgress = value.clamp(0.0, 1.0);
+    downloadBusy = downloadProgress > 0 && downloadProgress < 1.0;
+    notifyListeners();
+  }
+
+  void startDownload() {
+    downloadBusy = true;
+    downloadProgress = 0;
+    notifyListeners();
+  }
+
+  void finishDownload({String? localPath}) {
+    downloadBusy = false;
+    downloadProgress = 1.0;
+    if (localPath != null) artifactLocalPath = localPath;
+    notifyListeners();
+  }
+
+  void failDownload() {
+    downloadBusy = false;
+    downloadProgress = 0;
     notifyListeners();
   }
 

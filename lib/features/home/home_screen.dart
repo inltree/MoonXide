@@ -81,24 +81,51 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     });
   }
 
-  Future<void> _pollBuild(AppState state, BuildCenterState build) async {
-    final owner = state.selectedOwner;
-    final repo = state.selectedRepo;
+Future<void> _pollBuild(AppState state, BuildCenterState build) async {
+    final owner = build.buildOwner ?? state.selectedOwner;
+    final repo = build.buildRepo ?? state.selectedRepo;
     if (!build.busy || owner == null || repo == null || state.github == null) return;
     try {
       final runs = await state.github!.listWorkflowRuns(owner, repo);
       if (runs.isEmpty) return;
-      final run = runs.first;
+
+      Map<String, dynamic>? run;
+      if (build.workflowFile != null) {
+        final filtered = runs.where((r) => r['path']?.toString().endsWith('/${build.workflowFile}') == true).toList();
+        if (filtered.isNotEmpty) {
+          run = filtered.first;
+        }
+      }
+      run ??= runs.first;
+
       final runId = run['id'] as int;
       final status = run['status'];
       final conclusion = run['conclusion'];
       final url = run['html_url']?.toString();
 
+      // 如果有开始触发的时刻，校验本次构建的创建时刻或 ID 以避免拿旧数据
+      if (build.triggerStartedAt != null) {
+        final createdAtStr = run['created_at']?.toString();
+        if (createdAtStr != null) {
+          final createdAt = DateTime.tryParse(createdAtStr);
+          // 如果拉到的最近一次构建的创建时间早于我们开始触发的时间，说明 GitHub Actions 还未启动或还没产生新 run，先不读取它
+          if (createdAt != null && createdAt.isBefore(build.triggerStartedAt!.subtract(const Duration(seconds: 15)))) {
+            // 说明最新的还是以前的旧 run，GitHub Actions 响应还没上来
+            final stepText = build.currentStep != null ? '\n当前步骤：${build.currentStep}' : '';
+            build.updateProgress(
+              statusText: '正在等待 GitHub Actions 响应并分配新的构建编号…',
+              value: 0.12,
+            );
+            return;
+          }
+        }
+      }
+
       double progress = 0.12;
       String? currentStep;
       if (status == 'completed') {
         progress = 1.0;
-      } else if (status == 'in_progress') {
+      } else if (status == 'in_progress' || status == 'queued') {
         try {
           final jobs = await state.github!.listWorkflowJobs(owner, repo, runId);
           if (jobs.isNotEmpty) {
@@ -166,9 +193,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       return;
     }
     if (_buildPollTimer == null) {
-      // 立即拉一次，避免用户等太久才看到第一次状态
       _pollBuild(state, build);
-      _buildPollTimer = Timer.periodic(const Duration(seconds: 30), (_) => _pollBuild(state, build));
+      _buildPollTimer = Timer.periodic(const Duration(minutes: 1), (_) => _pollBuild(state, build));
     }
   }
 
