@@ -283,11 +283,35 @@ class EditorScreenState extends State<EditorScreen> {
     editor.updateContent(next);
   }
 
+  void _find(EditorState editor) {
+    final q = searchController.text;
+    if (q.isEmpty) return;
+    final idx = contentController.text.indexOf(q);
+    if (idx < 0) return;
+    contentController.selection = TextSelection(baseOffset: idx, extentOffset: idx + q.length);
+    contentController.setHighlight(idx, idx + q.length, _CodeHighlightKind.search);
+    _scrollToOffset(idx);
+  }
+
+  void _scrollToOffset(int offset) {
+    final before = contentController.text.substring(0, offset.clamp(0, contentController.text.length));
+    final line = '\n'.allMatches(before).length;
+    final lineH = (contentController.baseStyle.fontSize ?? 13) * (contentController.baseStyle.height ?? 1.55);
+    if (_editorScroll.hasClients) {
+      _editorScroll.animateTo((line * lineH).clamp(0.0, _editorScroll.position.maxScrollExtent), duration: const Duration(milliseconds: 220), curve: Curves.easeOutCubic);
+    }
+  }
+
   void _replace(EditorState editor) {
     if (searchController.text.isEmpty) return;
+    final first = contentController.text.indexOf(searchController.text);
     final next = contentController.text
         .replaceAll(searchController.text, replaceController.text);
     contentController.text = next;
+    if (first >= 0 && replaceController.text.isNotEmpty) {
+      contentController.setHighlight(first, first + replaceController.text.length, _CodeHighlightKind.replace);
+      _scrollToOffset(first);
+    }
     editor.updateContent(next);
   }
 
@@ -434,6 +458,10 @@ $fileContent
                         controller: replaceController, hint: '替换为')),
                 const SizedBox(width: 6),
                 MxIconBtn(
+                    icon: Icons.search_rounded,
+                    onPressed: () => _find(editor),
+                    size: 36),
+                MxIconBtn(
                     icon: Icons.find_replace_rounded,
                     onPressed: () => _replace(editor),
                     size: 36),
@@ -467,7 +495,15 @@ $fileContent
                       scrollDirection: Axis.horizontal,
                       child: SizedBox(
                         width: 1200, // 足够宽，允许长行横向滚动
-                        child: TextField(
+                        child: GestureDetector(
+                          onTap: contentController.clearHighlight,
+                          child: RawScrollbar(
+                            controller: _editorScroll,
+                            thumbVisibility: true,
+                            interactive: true,
+                            thickness: 4,
+                            radius: const Radius.circular(999),
+                            child: TextField(
                           controller: contentController,
                           readOnly: editor.readOnly,
                           scrollController: _editorScroll,
@@ -489,7 +525,9 @@ $fileContent
                             contentPadding: const EdgeInsets.fromLTRB(10, 2, 12, 12),
                             hintText: null,
                           ),
-                          onChanged: editor.updateContent,
+                          onChanged: (v) { contentController.clearHighlight(); editor.updateContent(v); },
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -710,11 +748,28 @@ class _RepairOverlayState extends State<_RepairOverlay> with SingleTickerProvide
 }
 
 
+enum _CodeHighlightKind { search, replace }
+
 class _CodeController extends TextEditingController {
   TextStyle baseStyle = const TextStyle(fontFamily: 'monospace', fontSize: 14);
   Color keywordColor = Colors.blue;
   Color stringColor = Colors.green;
   Color commentColor = Colors.grey;
+  TextRange highlightRange = TextRange.empty;
+  _CodeHighlightKind? highlightKind;
+
+  void setHighlight(int start, int end, _CodeHighlightKind kind) {
+    highlightRange = TextRange(start: start, end: end);
+    highlightKind = kind;
+    notifyListeners();
+  }
+
+  void clearHighlight() {
+    if (!highlightRange.isValid && highlightKind == null) return;
+    highlightRange = TextRange.empty;
+    highlightKind = null;
+    notifyListeners();
+  }
 
   static final _kw = RegExp(r'\b(class|void|final|const|var|return|if|else|for|while|switch|case|break|continue|import|package|new|public|private|static|fun|val|def|async|await|try|catch|throw|extends|implements)\b');
   static final _str = RegExp(r'''("[^"\n]*"|'[^'\n]*')''');
@@ -735,11 +790,30 @@ class _CodeController extends TextEditingController {
       if (m.start > i) spans.add(TextSpan(text: text.substring(i, m.start), style: baseStyle));
       final token = text.substring(m.start, m.end);
       final color = _comment.hasMatch(token) ? commentColor : (_str.hasMatch(token) ? stringColor : keywordColor);
-      spans.add(TextSpan(text: token, style: baseStyle.copyWith(color: color, fontWeight: _kw.hasMatch(token) ? FontWeight.w700 : null)));
+      final tokenStyle = baseStyle.copyWith(color: color, fontWeight: _kw.hasMatch(token) ? FontWeight.w700 : null);
+      spans.add(_spanWithHighlight(token, m.start, tokenStyle));
       i = m.end;
     }
-    if (i < text.length) spans.add(TextSpan(text: text.substring(i), style: baseStyle));
+    if (i < text.length) spans.add(_spanWithHighlight(text.substring(i), i, baseStyle));
     return TextSpan(style: baseStyle, children: spans);
+  }
+
+  TextSpan _spanWithHighlight(String segment, int absoluteStart, TextStyle style) {
+    if (!highlightRange.isValid || highlightRange.isCollapsed) return TextSpan(text: segment, style: style);
+    final start = highlightRange.start;
+    final end = highlightRange.end;
+    final segEnd = absoluteStart + segment.length;
+    if (segEnd <= start || absoluteStart >= end) return TextSpan(text: segment, style: style);
+    final children = <TextSpan>[];
+    final localStart = (start - absoluteStart).clamp(0, segment.length);
+    final localEnd = (end - absoluteStart).clamp(0, segment.length);
+    if (localStart > 0) children.add(TextSpan(text: segment.substring(0, localStart), style: style));
+    final bg = highlightKind == _CodeHighlightKind.replace
+        ? const Color(0xFFB7F7C8)
+        : const Color(0xFFB8D7FF);
+    children.add(TextSpan(text: segment.substring(localStart, localEnd), style: style.copyWith(backgroundColor: bg)));
+    if (localEnd < segment.length) children.add(TextSpan(text: segment.substring(localEnd), style: style));
+    return TextSpan(children: children, style: style);
   }
 }
 

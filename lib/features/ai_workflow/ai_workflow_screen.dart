@@ -52,42 +52,11 @@ class _AiWorkflowScreenState extends State<AiWorkflowScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('AI 工作流程'),
-        actions: [
-          IconButton(onPressed: engine.reset, icon: const Icon(Icons.refresh)),
-        ],
+        actions: const [],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          TextField(
-            controller: instructionController,
-            minLines: 3,
-            maxLines: 6,
-            decoration: const InputDecoration(
-              labelText: '输入你的开发任务',
-              hintText: '例如：给当前 Flutter 项目添加 WebView 页面并配置网络权限，然后构建 Debug 包。',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: () {
-                    engine.createTask(instructionController.text);
-                    engine.startAutoRun();
-                  },
-                  icon: const Icon(Icons.play_arrow),
-                  label: const Text('规划并自动执行'),
-                ),
-              ),
-              const SizedBox(width: 8),
-              IconButton(onPressed: engine.pause, icon: const Icon(Icons.pause)),
-              IconButton(onPressed: engine.resume, icon: const Icon(Icons.replay)),
-            ],
-          ),
-          const SizedBox(height: 16),
           if (plan != null) ...[
             Card(
               child: Padding(

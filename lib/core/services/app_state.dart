@@ -14,6 +14,7 @@ class AppState extends ChangeNotifier {
   String? login;
   String? selectedOwner;
   String? selectedRepo;
+  String? selectedRepoFullName;
   String? avatarUrl;
   Map<String, dynamic>? currentUser;
   String? customBackgroundPath;
@@ -30,6 +31,13 @@ class AppState extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     customBackgroundPath = prefs.getString('custom_background_path');
     bgOpacity = prefs.getDouble('bg_opacity') ?? 0.72;
+    final lastFullName = prefs.getString('selected_repo_full_name');
+    if (lastFullName != null && lastFullName.contains('/')) {
+      final parts = lastFullName.split('/');
+      selectedOwner = parts.first;
+      selectedRepo = parts.sublist(1).join('/');
+      selectedRepoFullName = lastFullName;
+    }
     token = await tokenStore.readToken();
     if (token == null || token!.isEmpty) return;
     github = GithubService(token: token!);
@@ -46,7 +54,7 @@ class AppState extends ChangeNotifier {
       login = user['login'] as String?;
       avatarUrl = user['avatar_url'] as String?;
       currentUser = Map<String, dynamic>.from(user);
-      selectedOwner = login;
+      selectedOwner ??= login;
       tokenValidated = true;
       tokenStatus = login == null ? 'Token 验证成功' : 'Token 验证成功：$login';
       error = null;
@@ -146,12 +154,16 @@ class AppState extends ChangeNotifier {
   void selectRepository(String owner, String repo) {
     selectedOwner = owner;
     selectedRepo = repo;
+    selectedRepoFullName = '$owner/$repo';
+    unawaited(SharedPreferences.getInstance().then((prefs) => prefs.setString('selected_repo_full_name', selectedRepoFullName!)));
     notifyListeners();
   }
 
   void clearRepositorySelection() {
     selectedOwner = null;
     selectedRepo = null;
+    selectedRepoFullName = null;
+    unawaited(SharedPreferences.getInstance().then((prefs) => prefs.remove('selected_repo_full_name')));
     notifyListeners();
   }
 

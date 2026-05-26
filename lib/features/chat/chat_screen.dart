@@ -305,30 +305,10 @@ class _ChatScreenState extends State<ChatScreen> {
         Row(children: [
           Expanded(
             child: MxButton(
-              label: workflow.running ? '暂停' : '继续',
-              icon: workflow.running ? Icons.pause_rounded : Icons.play_arrow_rounded,
+              label: workflow.running ? '执行中' : (plan.finished ? '已完成' : '等待执行'),
+              icon: workflow.running ? Icons.autorenew_rounded : (plan.finished ? Icons.check_circle_rounded : Icons.schedule_rounded),
               filled: false,
-              onPressed: () {
-                if (workflow.running) {
-                  workflow.pause();
-                } else {
-                  workflow.resume();
-                }
-                Navigator.pop(context);
-              },
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: MxButton(
-              label: '重置',
-              icon: Icons.refresh_rounded,
-              filled: false,
-              color: scheme.error,
-              onPressed: () {
-                workflow.reset();
-                Navigator.pop(context);
-              },
+              onPressed: null,
             ),
           ),
         ]),

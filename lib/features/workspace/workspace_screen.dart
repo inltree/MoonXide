@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import '../../app/mx_widgets.dart';
 import '../../core/services/app_state.dart';
 import '../../core/services/editor_state.dart';
@@ -58,8 +59,50 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
   final _nameCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
   final _renameCtrl = TextEditingController();
+  final _newFileCtrl = TextEditingController();
+  final _newFolderCtrl = TextEditingController();
   bool _private = true;
   bool _autoInit = true;
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _bootstrapWorkspace());
+  }
+
+  @override
+  void didUpdateWidget(covariant WorkspaceScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.state.github != widget.state.github ||
+        oldWidget.state.selectedRepo != widget.state.selectedRepo ||
+        oldWidget.state.selectedOwner != widget.state.selectedOwner) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _bootstrapWorkspace());
+    }
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _descCtrl.dispose();
+    _renameCtrl.dispose();
+    _newFileCtrl.dispose();
+    _newFolderCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _bootstrapWorkspace() async {
+    if (!mounted || widget.state.github == null) return;
+    await _fetchRepos(force: _repos.isEmpty);
+    if (!mounted) return;
+    final selectedRepo = widget.state.selectedRepo;
+    final selectedOwner = widget.state.selectedOwner;
+    if (selectedRepo != null && selectedOwner != null && selectedRepo.isNotEmpty) {
+      await _selectRepo(selectedOwner, selectedRepo);
+    } else if (_repos.isNotEmpty) {
+      final first = _repos.first;
+      await _selectRepo(first['owner']['login'] as String, first['name'] as String);
+    }
+  }
+
   Future<void> _fetchRepos({bool force = false}) async {
     if (widget.state.github == null) return;
     if (!force && _repos.isNotEmpty) return;
@@ -297,6 +340,60 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     await Future<void>.delayed(const Duration(milliseconds: 80));
   }
 
+  Future<void> _invalidateAndRefresh([String path = '']) async {
+    _treeCache.clear();
+    _cachedTree.clear();
+    await _fetchTree(path, force: true);
+  }
+
+  String _joinPath(String parent, String name) => parent.isEmpty ? name : '$parent/$name';
+
+  Future<void> _createFileAt(String parentPath, String name) async {
+    final owner = widget.state.selectedOwner;
+    final repo = widget.state.selectedRepo;
+    if (owner == null || repo == null || widget.state.github == null || name.trim().isEmpty) return;
+    final path = _joinPath(parentPath, name.trim());
+    try {
+      await widget.state.github!.putFile(
+        owner: owner,
+        repo: repo,
+        path: path,
+        message: 'Create $path',
+        contentBase64: base64Encode(utf8.encode('')),
+      );
+      await _invalidateAndRefresh('');
+    } catch (e) {
+      setState(() => _error = '新建文件失败：$e');
+    }
+  }
+
+  Future<void> _createFolderAt(String parentPath, String name) async {
+    final folder = name.trim().replaceAll(RegExp(r'/+$'), '');
+    if (folder.isEmpty) return;
+    await _createFileAt(_joinPath(parentPath, folder), '.gitkeep');
+  }
+
+  void _showNewItemSheet({_TreeNode? parent}) {
+    final parentPath = parent?.path ?? '';
+    _newFileCtrl.clear();
+    _newFolderCtrl.clear();
+    _showSheet(title: parent == null ? '新建' : '在 ${parent.name} 中新建', children: [
+      MxTextField(controller: _newFileCtrl, hint: '新文件名，例如 lib/main.dart', prefix: const Icon(Icons.note_add_rounded, size: 17)),
+      const SizedBox(height: 8),
+      MxButton(label: '新建文件', icon: Icons.note_add_rounded, onPressed: () async {
+        await _safePopOverlay();
+        await _createFileAt(parentPath, _newFileCtrl.text);
+      }),
+      const SizedBox(height: 14),
+      MxTextField(controller: _newFolderCtrl, hint: '新文件夹名，例如 src', prefix: const Icon(Icons.create_new_folder_rounded, size: 17)),
+      const SizedBox(height: 8),
+      MxButton(label: '新建文件夹', icon: Icons.create_new_folder_rounded, filled: false, onPressed: () async {
+        await _safePopOverlay();
+        await _createFolderAt(parentPath, _newFolderCtrl.text);
+      }),
+    ]);
+  }
+
   void _showFileMenu(_TreeNode node) {
     final scheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -317,6 +414,15 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
         ]),
       ),
       const SizedBox(height: 12),
+      if (node.isDir) ...[
+        MxButton(
+          label: '在此新建文件 / 文件夹',
+          icon: Icons.add_rounded,
+          filled: false,
+          onPressed: () async { await _safePopOverlay(); _showNewItemSheet(parent: node); },
+        ),
+        const SizedBox(height: 8),
+      ],
       // 复制路径
       MxButton(
         label: '复制路径',
@@ -508,6 +614,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
           onRefresh: () async { _treeCache.clear(); await _fetchRepos(force: true); if (selected != null && selected.isNotEmpty) await _fetchTree('', force: true); },
           onNew: _showCreateSheet,
           onUpload: _upload,
+          onNewItem: () => _showNewItemSheet(),
           onManage: _showManageSheet,
           canManage: selected != null && selected.isNotEmpty,
         ),
@@ -544,7 +651,7 @@ itemBuilder: (_, i) => _TreeTile(
 }
 
 class _RepoBar extends StatelessWidget {
-  const _RepoBar({required this.repos, required this.selected, required this.loading, required this.onSelect, required this.onRefresh, required this.onNew, required this.onUpload, required this.onManage, required this.canManage});
+  const _RepoBar({required this.repos, required this.selected, required this.loading, required this.onSelect, required this.onRefresh, required this.onNew, required this.onUpload, required this.onNewItem, required this.onManage, required this.canManage});
   final List<Map<String, dynamic>> repos;
   final String? selected;
   final bool loading;
@@ -552,6 +659,7 @@ class _RepoBar extends StatelessWidget {
   final VoidCallback onRefresh;
   final VoidCallback onNew;
   final VoidCallback onUpload;
+  final VoidCallback onNewItem;
   final VoidCallback onManage;
   final bool canManage;
 
@@ -583,8 +691,9 @@ class _RepoBar extends StatelessWidget {
         ),
         const SizedBox(width: 2),
         MxIconBtn(icon: Icons.upload_file_rounded, onPressed: onUpload, tooltip: '上传', size: 30),
+        MxIconBtn(icon: Icons.note_add_rounded, onPressed: canManage ? onNewItem : null, tooltip: '新建文件/文件夹', size: 30),
         MxIconBtn(icon: Icons.refresh_rounded, onPressed: onRefresh, tooltip: '刷新', size: 30),
-        MxIconBtn(icon: Icons.create_new_folder_outlined, onPressed: onNew, tooltip: '新建', size: 30),
+        MxIconBtn(icon: Icons.create_new_folder_outlined, onPressed: onNew, tooltip: '新建仓库', size: 30),
         MxIconBtn(icon: Icons.more_vert_rounded,
             onPressed: canManage ? onManage : null, tooltip: '管理', size: 30),
       ]),
@@ -607,7 +716,7 @@ class _CompactRepoSelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final current = selected == null || selected!.isEmpty ? null
-        : repos.where((r) => r['name'] == selected).firstOrNull;
+        : repos.where((r) => r['name'] == selected || r['full_name'] == selected).firstOrNull;
     final isPrivate = current?['private'] == true;
 
     return PopupMenuButton<String>(
@@ -627,7 +736,7 @@ class _CompactRepoSelector extends StatelessWidget {
       itemBuilder: (_) => repos.map((r) {
         final name = r['name'] as String;
         final priv = r['private'] == true;
-        final active = name == selected;
+        final active = name == selected || r['full_name'] == selected;
         return PopupMenuItem<String>(
           value: name,
           height: 36,
@@ -716,14 +825,36 @@ class _TreeTile extends StatefulWidget {
 }
 
 class _FileGlyph extends StatelessWidget {
-  const _FileGlyph({required this.icon, required this.color, this.badge});
+  const _FileGlyph({required this.icon, required this.color, this.badge, this.ext});
 
   final IconData icon;
   final Color color;
   final String? badge;
+  final String? ext;
+
+  static const _devicon = {
+    'dart': 'dart', 'js': 'javascript', 'mjs': 'javascript', 'cjs': 'javascript',
+    'ts': 'typescript', 'jsx': 'react', 'tsx': 'react', 'py': 'python', 'pyw': 'python',
+    'java': 'java', 'kt': 'kotlin', 'kts': 'kotlin', 'c': 'c', 'h': 'c',
+    'cpp': 'cplusplus', 'cc': 'cplusplus', 'cxx': 'cplusplus', 'hpp': 'cplusplus',
+    'cs': 'csharp', 'rs': 'rust', 'go': 'go', 'swift': 'swift', 'rb': 'ruby',
+    'php': 'php', 'lua': 'lua', 'r': 'r', 'html': 'html5', 'css': 'css3',
+    'vue': 'vuejs', 'svg': 'svg',
+  };
 
   @override
   Widget build(BuildContext context) {
+    final key = ext == null ? null : _devicon[ext!.toLowerCase()];
+    if (key != null) {
+      return SizedBox(
+        width: 16,
+        height: 16,
+        child: SvgPicture.network(
+          'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/$key/$key-original.svg',
+          placeholderBuilder: (_) => Icon(icon, size: 15, color: color),
+        ),
+      );
+    }
     if (badge == null) return Icon(icon, size: 15, color: color);
     return Container(
       width: 20,
@@ -1013,9 +1144,9 @@ class _TreeTileState extends State<_TreeTile> {
                     )
                   : null),
               const SizedBox(width: 2),
-              _FileGlyph(icon: _icon(), color: _iconColor(), badge: _languageBadge()),
+              _FileGlyph(icon: _icon(), color: _iconColor(), badge: _languageBadge(), ext: node.name.contains('.') ? node.name.toLowerCase().split('.').last : null),
               const SizedBox(width: 6),
-              Expanded(child: Text(node.name, maxLines: 1, overflow: TextOverflow.ellipsis,
+              Expanded(child: Text(node.name, maxLines: 2, overflow: TextOverflow.ellipsis,
                   style: TextStyle(fontSize: 13,
                       fontWeight: node.isDir ? FontWeight.w600 : FontWeight.w400,
                       color: isSelected
