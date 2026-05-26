@@ -613,68 +613,71 @@ $fileContent
                         ),
                       ),
 
-                    // ── 浮动快捷滚动滑块（主页面中间右侧放一个滚动条，用户可以触摸进行滑动滚动条进行快速浏览定位代码） ──
+                    // ── 浮动快捷滚动滑块（极简无外框设计，类长方形微圆角滑块） ──
                     Positioned(
-                      right: 4,
+                      right: 2,
                       top: 40,
                       bottom: 40,
-                      width: 28,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: isDark ? Colors.black.withOpacity(0.35) : Colors.white.withOpacity(0.35),
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: scheme.primary.withOpacity(0.12)),
-                        ),
-                        child: LayoutBuilder(
-                          builder: (ctx, constraints) {
-                            return GestureDetector(
-                              behavior: HitTestBehavior.translucent,
-                              onVerticalDragUpdate: (details) {
-                                if (!_editorScroll.hasClients) return;
-                                final localY = details.localPosition.dy;
-                                final totalH = constraints.maxHeight;
-                                final pct = (localY / totalH).clamp(0.0, 1.0);
-                                final targetScroll = pct * _editorScroll.position.maxScrollExtent;
-                                _editorScroll.jumpTo(targetScroll);
-                              },
-                              child: AnimatedBuilder(
-                                animation: _editorScroll,
-                                builder: (context, _) {
-                                  double pct = 0.0;
-                                  if (_editorScroll.hasClients && _editorScroll.position.maxScrollExtent > 0) {
-                                    pct = (_editorScroll.offset / _editorScroll.position.maxScrollExtent).clamp(0.0, 1.0);
-                                  }
-                                  final trackH = constraints.maxHeight;
-                                  final thumbH = 36.0;
-                                  final topOffset = (pct * (trackH - thumbH)).clamp(0.0, trackH - thumbH);
-                                  return Stack(
-                                    children: [
-                                      Positioned(
-                                        top: topOffset,
-                                        left: 4,
-                                        right: 4,
-                                        height: thumbH,
+                      width: 12, // 窄身轨道，无宽大背景外框
+                      child: LayoutBuilder(
+                        builder: (ctx, constraints) {
+                          return GestureDetector(
+                            behavior: HitTestBehavior.translucent,
+                            onVerticalDragUpdate: (details) {
+                              if (!_editorScroll.hasClients) return;
+                              final localY = details.localPosition.dy;
+                              final totalH = constraints.maxHeight;
+                              final pct = (localY / totalH).clamp(0.0, 1.0);
+                              final targetScroll = pct * _editorScroll.position.maxScrollExtent;
+                              _editorScroll.jumpTo(targetScroll);
+                            },
+                            child: AnimatedBuilder(
+                              animation: _editorScroll,
+                              builder: (context, _) {
+                                double pct = 0.0;
+                                if (_editorScroll.hasClients && _editorScroll.position.maxScrollExtent > 0) {
+                                  pct = (_editorScroll.offset / _editorScroll.position.maxScrollExtent).clamp(0.0, 1.0);
+                                }
+                                final trackH = constraints.maxHeight;
+                                final thumbH = 44.0; // 适当拉长的触摸高度
+                                final topOffset = (pct * (trackH - thumbH)).clamp(0.0, trackH - thumbH);
+                                return Stack(
+                                  children: [
+                                    Positioned(
+                                      top: topOffset,
+                                      left: 1,
+                                      right: 1,
+                                      height: thumbH,
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          // 使用半透明主色，并在深浅色模式下完美适配
+                                          color: scheme.primary.withOpacity(0.85),
+                                          borderRadius: BorderRadius.circular(4), // 减小圆角，呈现更带劲、利落的现代类长方形
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: scheme.primary.withOpacity(0.24),
+                                              blurRadius: 4,
+                                              offset: const Offset(0, 1),
+                                            )
+                                          ],
+                                        ),
+                                        alignment: Alignment.center,
                                         child: Container(
+                                          width: 2,
+                                          height: 12,
                                           decoration: BoxDecoration(
-                                            color: scheme.primary.withOpacity(0.72),
-                                            borderRadius: BorderRadius.circular(99),
-                                            boxShadow: [
-                                              BoxShadow(
-                                                color: scheme.primary.withOpacity(0.3),
-                                                blurRadius: 6,
-                                              )
-                                            ],
+                                            color: Colors.white.withOpacity(0.6),
+                                            borderRadius: BorderRadius.circular(1),
                                           ),
-                                          child: const Icon(Icons.unfold_more_rounded, size: 14, color: Colors.white),
                                         ),
                                       ),
-                                    ],
-                                  );
-                                },
-                              ),
-                            );
-                          },
-                        ),
+                                    ),
+                                  ],
+                                );
+                              },
+                            ),
+                          );
+                        },
                       ),
                     ),
                   ],
