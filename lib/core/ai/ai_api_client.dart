@@ -65,10 +65,12 @@ class AiApiClient {
     }
     final body = builder.buildBodyWithHistory(config, history, text);
     final response = await client.post(Uri.parse(url), headers: headers, body: jsonEncode(body));
+    // 用 utf8 解码 response.bodyBytes，防止 Dart 默认用 Latin-1 (ISO-8859-1) 造成乱码
+    final decodedBody = utf8.decode(response.bodyBytes);
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception('AI 请求失败 ${response.statusCode}: ${response.body}');
+      throw Exception('AI 请求失败 ${response.statusCode}: $decodedBody');
     }
-    return response.body;
+    return decodedBody;
   }
 
   /// 流式调用 AI API，返回逐 token 的 Stream<String>
