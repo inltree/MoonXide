@@ -752,18 +752,58 @@ class _RightMenu extends StatelessWidget {
   }
 }
 
-class _BuildToast extends StatelessWidget {
+class _BuildToast extends StatefulWidget {
   const _BuildToast({required this.center});
   final BuildCenterState center;
+
+  @override
+  State<_BuildToast> createState() => _BuildToastState();
+}
+
+class _BuildToastState extends State<_BuildToast> {
+  late Timer _tipTimer;
+  int _tipIdx = 0;
+
+  static const _tips = [
+    '☕ 代码正在变成二进制，顺便喝杯咖啡吧。',
+    '✨ 正在给你的 APK 注入魔法，请稍候。',
+    '🌌 物理规律表明，代码越好，编译速度越快…',
+    '🚀 编译服务器正在全力以赴，马上就好！',
+    '🛠 只要不报错，慢一点其实是种享受。',
+    '🌈 有时候，等待是为了让结果更完美。',
+    '🤖 顺便检查了下，AI 的工作成果没有偷懒。',
+    '💎 我们正在对代码包进行深度的压缩与润色…',
+    '🎯 不要焦躁，优秀的产品值得细心打磨。',
+    '🍂 如果报错了，记得叫 AI 帮你修哦！',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _tipIdx = (DateTime.now().second) % _tips.length;
+    _tipTimer = Timer.periodic(const Duration(seconds: 12), (_) {
+      if (mounted) {
+        setState(() {
+          _tipIdx = (_tipIdx + 1) % _tips.length;
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _tipTimer.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     
-    final isRunning = center.outcome == BuildOutcome.running;
-    final isSuccess = center.outcome == BuildOutcome.success;
-    final isFailure = center.outcome == BuildOutcome.failure;
+    final isRunning = widget.center.outcome == BuildOutcome.running;
+    final isSuccess = widget.center.outcome == BuildOutcome.success;
+    final isFailure = widget.center.outcome == BuildOutcome.failure;
     
     final bgColor = isSuccess
         ? const Color(0xFF1E8E3E)
@@ -776,18 +816,18 @@ class _BuildToast extends StatelessWidget {
         : (isFailure ? Icons.error_outline_rounded : Icons.build_circle_rounded);
     final title = isSuccess
         ? '构建成功'
-        : (isFailure ? '构建失败' : (center.status.contains('推送') ? '正在推送' : '正在构建'));
+        : (isFailure ? '构建失败' : (widget.center.status.contains('推送') ? '正在推送' : '正在构建'));
     
     return Material(
       color: Colors.transparent,
       child: Container(
-        width: 250,
-        padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+        width: 220, // 缩窄通知条宽度
+        padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
         decoration: BoxDecoration(
-          color: bgColor.withOpacity(isRunning ? 0.74 : 0.92),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: borderColor.withOpacity(0.45)),
-          boxShadow: [BoxShadow(color: borderColor.withOpacity(0.22), blurRadius: 22, offset: const Offset(0, 8))],
+          color: bgColor.withOpacity(isRunning ? 0.82 : 0.94),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: borderColor.withOpacity(0.40)),
+          boxShadow: [BoxShadow(color: borderColor.withOpacity(0.18), blurRadius: 18, offset: const Offset(0, 6))],
         ),
         child: Stack(
           children: [
@@ -797,45 +837,57 @@ class _BuildToast extends StatelessWidget {
               children: [
                 Row(children: [
                   if (isRunning)
-                    SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation(scheme.primary)))
+                    SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation(scheme.primary)))
                   else
-                    Icon(icon, size: 16, color: Colors.white),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text(title, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: isRunning ? null : Colors.white))),
+                    Icon(icon, size: 14, color: Colors.white),
+                  const SizedBox(width: 6),
+                  Expanded(child: Text(title, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: isRunning ? null : Colors.white))),
                   if (isRunning)
                     Padding(
-                      padding: const EdgeInsets.only(right: 18),
-                      child: Text('${(center.progress * 100).round()}%', style: TextStyle(fontSize: 11, color: scheme.primary, fontWeight: FontWeight.w900)),
+                      padding: const EdgeInsets.only(right: 16),
+                      child: Text('${(widget.center.progress * 100).round()}%', style: TextStyle(fontSize: 10, color: scheme.primary, fontWeight: FontWeight.w900)),
                     ),
                 ]),
                 if (isRunning) ...[
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
                   Padding(
-                    padding: const EdgeInsets.only(right: 18),
+                    padding: const EdgeInsets.only(right: 16),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(99),
-                      child: LinearProgressIndicator(value: center.progress <= 0 ? null : center.progress, minHeight: 4),
+                      child: LinearProgressIndicator(value: widget.center.progress <= 0 ? null : widget.center.progress, minHeight: 3),
                     ),
                   ),
                 ],
-                const SizedBox(height: 6),
+                const SizedBox(height: 5),
                 Padding(
-                  padding: const EdgeInsets.only(right: 18),
+                  padding: const EdgeInsets.only(right: 16),
                   child: Text(
-                    center.status.split('\n').first,
-                    maxLines: 2,
+                    widget.center.status.split('\n').first,
+                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 11, color: isRunning ? scheme.onSurface.withOpacity(0.62) : Colors.white.withOpacity(0.85)),
+                    style: TextStyle(fontSize: 10, color: isRunning ? scheme.onSurface.withOpacity(0.55) : Colors.white.withOpacity(0.8)),
                   ),
                 ),
+                if (isRunning) ...[
+                  const SizedBox(height: 5),
+                  Padding(
+                    padding: const EdgeInsets.only(right: 16),
+                    child: Text(
+                      _tips[_tipIdx],
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 9, height: 1.25, color: scheme.onSurface.withOpacity(0.48), fontStyle: FontStyle.italic),
+                    ),
+                  ),
+                ],
               ],
             ),
             Positioned(
-              top: -8,
-              right: -8,
+              top: -6,
+              right: -6,
               child: IconButton(
-                icon: Icon(Icons.close_rounded, size: 16, color: isRunning ? scheme.onSurface.withOpacity(0.5) : Colors.white.withOpacity(0.8)),
-                onPressed: () => center.dismissToast(),
+                icon: Icon(Icons.close_rounded, size: 14, color: isRunning ? scheme.onSurface.withOpacity(0.45) : Colors.white.withOpacity(0.75)),
+                onPressed: () => widget.center.dismissToast(),
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
               ),

@@ -491,41 +491,43 @@ $fileContent
               Expanded(
                 child: Stack(
                   children: [
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: SizedBox(
-                        width: 1200, // 足够宽，允许长行横向滚动
-                        child: GestureDetector(
-                          onTap: contentController.clearHighlight,
-                          child: RawScrollbar(
-                            controller: _editorScroll,
-                            thumbVisibility: true,
-                            interactive: true,
-                            thickness: 4,
-                            radius: const Radius.circular(999),
+                    RawScrollbar(
+                      controller: _editorScroll,
+                      thumbVisibility: true,
+                      interactive: true,
+                      thickness: 6,
+                      radius: const Radius.circular(999),
+                      thumbColor: scheme.primary.withOpacity(0.58),
+                      minOverscrollLength: 20,
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: SizedBox(
+                          width: 1200, // 足够宽，允许长行横向滚动
+                          child: GestureDetector(
+                            onTap: contentController.clearHighlight,
                             child: TextField(
-                          controller: contentController,
-                          readOnly: editor.readOnly,
-                          scrollController: _editorScroll,
-                          expands: true,
-                          maxLines: null,
-                          minLines: null,
-                          keyboardType: TextInputType.multiline,
-                          textAlignVertical: TextAlignVertical.top,
-                          style: contentController.baseStyle,
-                          decoration: InputDecoration(
-                            filled: true,
-                            fillColor: editorBg,
-                            border: InputBorder.none,
-                            enabledBorder: InputBorder.none,
-                            focusedBorder: InputBorder.none,
-                            disabledBorder: InputBorder.none,
-                            errorBorder: InputBorder.none,
-                            focusedErrorBorder: InputBorder.none,
-                            contentPadding: const EdgeInsets.fromLTRB(10, 2, 12, 12),
-                            hintText: null,
-                          ),
-                          onChanged: (v) { contentController.clearHighlight(); editor.updateContent(v); },
+                              controller: contentController,
+                              readOnly: editor.readOnly,
+                              scrollController: _editorScroll,
+                              expands: true,
+                              maxLines: null,
+                              minLines: null,
+                              keyboardType: TextInputType.multiline,
+                              textAlignVertical: TextAlignVertical.top,
+                              style: contentController.baseStyle,
+                              decoration: InputDecoration(
+                                filled: true,
+                                fillColor: editorBg,
+                                border: InputBorder.none,
+                                enabledBorder: InputBorder.none,
+                                focusedBorder: InputBorder.none,
+                                disabledBorder: InputBorder.none,
+                                errorBorder: InputBorder.none,
+                                focusedErrorBorder: InputBorder.none,
+                                contentPadding: const EdgeInsets.fromLTRB(10, 2, 12, 12),
+                                hintText: null,
+                              ),
+                              onChanged: (v) { contentController.clearHighlight(); editor.updateContent(v); },
                             ),
                           ),
                         ),
