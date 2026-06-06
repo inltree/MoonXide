@@ -1,6 +1,4 @@
 
-
-``
 # MoonXide
 
 ![CocoAI Logo](https://img.cdn1.vip/i/6a240e894eb91_1780747913.webp)
@@ -36,5 +34,3 @@ flutter run
 开源协议
 
 MIT License
-
-```
