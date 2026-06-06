@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:uuid/uuid.dart';
 import 'package:provider/provider.dart';
 import '../../app/mx_widgets.dart';
 import '../../core/ai/ai_api_client.dart';
@@ -14,6 +15,7 @@ import '../../core/chat/chat_message_record.dart';
 import '../../core/chat/chat_role.dart';
 import '../../core/services/app_state.dart';
 import '../../core/services/editor_state.dart';
+import '../../core/workflow/ai_task_step.dart';
 import '../../core/workflow/ai_task_step_status.dart';
 import '../../core/workflow/ai_workflow_engine.dart';
 

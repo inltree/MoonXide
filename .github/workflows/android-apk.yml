@@ -63,6 +63,16 @@ jobs:
           print(manifest.read_text())
           PY
 
+          python3 - <<'PY'
+          from pathlib import Path
+          gradle = Path('android/app/build.gradle.kts')
+          text = gradle.read_text()
+          if 'ndkVersion = "27.0.12077973"' not in text:
+              text = text.replace('android {', 'android {\n    ndkVersion = "27.0.12077973"', 1)
+              gradle.write_text(text)
+          print(gradle.read_text())
+          PY
+
       - name: Install dependencies
         run: |
           rm -f pubspec.lock
