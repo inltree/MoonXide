@@ -2,12 +2,20 @@
 
 **English** | [🇨🇳 简体中文](./README.md)
 
-![MoonXide Logo](https://img.cdn1.vip/i/6a240e894eb91_1780747913.webp)
+<p align="center">
+    <img src="https://img.cdn1.vip/i/6a240e894eb91_1780747913.webp" alt="MoonXide Logo" />
+</p>
+
+<p align="center">
+    <a href="https://flutter.dev" alt="Flutter">
+        <img src="https://img.shields.io/badge/Flutter-3.13+-02569B?logo=flutter" /></a>
+    <a href="LICENSE" alt="MIT License">
+        <img src="https://img.shields.io/badge/License-MIT-green.svg" /></a>
+    <a href="https://github.com/inltree/MoonXide" alt="Stars">
+        <img src="https://img.shields.io/github/stars/cmbh0/MoonXide?logo=github&color=yellow" /></a>
+</p>
 
 > Mobile GitHub-powered IDE — Complete coding, AI assistance, and cloud APK building on Android.
-
-[![Flutter](https://img.shields.io/badge/Flutter-3.16+-02569B?logo=flutter)](https://flutter.dev)
-[![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 ## ✨ Core Features (All Implemented)
 
